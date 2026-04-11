@@ -4,10 +4,14 @@ const clamp = (num: number, min: number, max: number) =>
 //#endregion
 
 //#region Noise Canvases
+
 //#region Abstract
+
+//#region     Needed Types
+type NoiseInputType = InputContainer | string | undefined
 class InputContainer {
-  private inputElement: HTMLInputElement
-  private onUpdateMethod: () => void
+  private readonly inputElement: HTMLInputElement
+  private readonly onUpdateMethod: () => void
 
   constructor(inputElement: HTMLInputElement, onUpdate: () => void) {
     this.inputElement = inputElement
@@ -23,16 +27,18 @@ class InputContainer {
     return this.inputElement.value
   }
 }
+//#endregion
 
-type NoiseInputType = InputContainer | string | undefined
-
+//#region     Class Definition
 abstract class NoiseCanvas extends HTMLElement {
+  //#region Constants
   private static readonly DEFAULT_RESOLUTION = "50"
   private static readonly DEFAULT_PROGRESS = 1.0
+  //#endregion
 
-  protected readonly shadow: ShadowRoot
-  protected readonly canvas: HTMLCanvasElement
-  protected readonly ctx: CanvasRenderingContext2D
+  //#region Private Accessors
+  private readonly canvas: HTMLCanvasElement
+  private readonly ctx: CanvasRenderingContext2D
 
   private buffer: ImageData
   private progressMemory: Uint8Array | Uint16Array | Uint32Array | undefined
@@ -41,7 +47,9 @@ abstract class NoiseCanvas extends HTMLElement {
   private allowCanvasDisplay: boolean = true
 
   private frame: number = 0
+  //#endregion
 
+  //#region Connection Attribute Names
   private static readonly resolutionNames = [
     "resolution",
     "resolutionX",
@@ -49,18 +57,22 @@ abstract class NoiseCanvas extends HTMLElement {
   ]
   private static readonly progressNames = ["progress"]
   private valueInputs: Record<string, NoiseInputType> = {}
+  //#endregion
 
+  //#region Attribute Update Methods
   private readonly valueUpdaterMethod: () => void =
     this.scheduleBufferRefresh.bind(this)
   private readonly resolutionUpdaterMethod: () => void =
     this.resizeCanvas.bind(this)
   private readonly progressUpdaterMethod: () => void = this.forceDraw.bind(this)
+  //#endregion
 
+  //#region Constructor
   constructor() {
     super()
 
-    this.shadow = this.attachShadow({ mode: "closed" })
-    this.shadow.innerHTML = `
+    const shadow = this.attachShadow({ mode: "closed" })
+    shadow.innerHTML = `
       <style>
         canvas {
           width: 100%;
@@ -76,7 +88,7 @@ abstract class NoiseCanvas extends HTMLElement {
 
     this.updateAllowCanvasDisplay()
 
-    this.canvas = this.shadow.querySelector("canvas")!
+    this.canvas = shadow.querySelector("canvas")!
     const ctx = this.canvas.getContext("2d")
     if (!ctx) throw new Error("2D canvas context not available")
 
@@ -84,11 +96,17 @@ abstract class NoiseCanvas extends HTMLElement {
     this.ctx = ctx
     this.buffer = new ImageData(1, 1)
   }
+  //#endregion
 
-  // Abstract
+  //#region Abstract Methods
+  //    Used to draw the desired buffer, which will be kept until a refresh or a redraw is requested
   protected abstract setBuffer(buffer: ImageData): void
+  //    Used to return what values this NoiseType needs to function
+  protected abstract getValueNames(): Array<string>
+  //#endregion
 
-  // Dom Enter/Exit
+  //#region Virtual Methods
+  //    Dom Enter/Exit
   connectedCallback(): void {
     this.connectAll()
     this.resizeCanvas()
@@ -100,7 +118,7 @@ abstract class NoiseCanvas extends HTMLElement {
     this.disconnectAll()
   }
 
-  // Attribute Changes
+  //    Attribute Changes
   static get observedAttributes() {
     return [
       "inputsRoot",
@@ -143,8 +161,9 @@ abstract class NoiseCanvas extends HTMLElement {
       }
     }
   }
+  //#endregion
 
-  // Canvas
+  //#region Resolution
   private resizeCanvas(): void {
     const canvas = this.canvas
     const [resolution, resolutionX, resolutionY] = NoiseCanvas.resolutionNames
@@ -168,23 +187,41 @@ abstract class NoiseCanvas extends HTMLElement {
 
     this.scheduleBufferRefresh()
   }
+  //#endregion
 
-  // Draw Buffer
+  //#region Draw/Buffer Manipulation
+  //    Buffer
   private scheduleBufferRefresh(): void {
     cancelAnimationFrame(this.frame)
     this.frame = requestAnimationFrame(() => this.refreshBuffer())
   }
-
   private refreshBuffer(): void {
     this.writeIdx = 0
 
     this.setBuffer(this.buffer)
     this.forceDraw()
   }
+
+  //    Draw
   private forceDraw(): void {
     if (this.drawCheck(this.buffer, this.getProgress())) {
       this.drawBuffer(this.buffer, this.getProgress())
     }
+  }
+  private drawCheck(buffer: ImageData, progress: number): boolean {
+    if (!this.allowCanvasDisplay) {
+      this.ctx.clearRect(0, 0, buffer.width, buffer.height)
+      return false
+    }
+    if (this.progressMemory === undefined || progress >= 1.0) {
+      this.ctx.putImageData(buffer, 0, 0)
+      return false
+    }
+    if (progress <= 0.0) {
+      this.ctx.clearRect(0, 0, buffer.width, buffer.height)
+      return false
+    }
+    return true
   }
   private drawBuffer(buffer: ImageData, progress: number): void {
     const memory = this.progressMemory!
@@ -206,53 +243,11 @@ abstract class NoiseCanvas extends HTMLElement {
       0,
     )
   }
+  //#endregion
 
-  // Draw Frame
-  private drawCheck(buffer: ImageData, progress: number): boolean {
-    if (!this.allowCanvasDisplay) {
-      this.ctx.clearRect(0, 0, buffer.width, buffer.height)
-      return false
-    }
-    if (this.progressMemory === undefined || progress >= 1.0) {
-      this.ctx.putImageData(buffer, 0, 0)
-      return false
-    }
-    if (progress <= 0.0) {
-      this.ctx.clearRect(0, 0, buffer.width, buffer.height)
-      return false
-    }
-    return true
-  }
-
-  // ValueTypes
-  private getInputsRoot(): Document | Element {
-    const baseRoot = this.getAttribute("inputs")
-    return baseRoot === null
-      ? document
-      : (document.querySelector(baseRoot) ?? document)
-  }
-  private getSelectors(): Array<HTMLInputElement> {
-    return Array.from(
-      this.getInputsRoot().querySelectorAll<HTMLInputElement>("input[name]"),
-    )
-  }
-
-  //    Value
-  protected abstract getValueNames(): Array<string>
-  private getValueFromType(val: NoiseInputType): string | undefined {
-    if (val === undefined) {
-      return undefined
-    }
-    if (typeof val === "string") {
-      return val
-    }
-    return val.getValue()
-  }
-  public getValue(name: string): string | undefined {
-    return this.getValueFromType(this.valueInputs[name])
-  }
-
-  //    Connect
+  //#region Attribute Event Settup
+  //#region     Connection
+  //                Base Connection
   private connectName(
     name: string,
     onUpdate: () => void,
@@ -287,64 +282,55 @@ abstract class NoiseCanvas extends HTMLElement {
       return
     }
   }
-
-  private connectValues(
+  private connectAbstract(
     selectors: Array<HTMLInputElement> | undefined = undefined,
     name: string | undefined = undefined,
+    onUpdate: () => void,
   ): void {
     if (selectors === undefined) {
       selectors = this.getSelectors()
     }
 
     if (name !== undefined) {
-      this.connectName(name, this.valueUpdaterMethod, selectors)
+      this.connectName(name, onUpdate, selectors)
       return
     }
     this.getValueNames().map((val) =>
-      this.connectName(val, this.valueUpdaterMethod, selectors),
+      this.connectName(val, onUpdate, selectors),
     )
+  }
+
+  //                Types of Connections
+  private connectValues(
+    selectors: Array<HTMLInputElement> | undefined = undefined,
+    name: string | undefined = undefined,
+  ): void {
+    this.connectAbstract(selectors, name, this.valueUpdaterMethod)
   }
   private connectResolution(
     selectors: Array<HTMLInputElement> | undefined = undefined,
     name: string | undefined = undefined,
   ): void {
-    if (selectors === undefined) {
-      selectors = this.getSelectors()
-    }
-
-    if (name !== undefined) {
-      this.connectName(name, this.resolutionUpdaterMethod, selectors)
-      return
-    }
-    NoiseCanvas.resolutionNames.map((val) =>
-      this.connectName(val, this.resolutionUpdaterMethod, selectors),
-    )
+    this.connectAbstract(selectors, name, this.resolutionUpdaterMethod)
   }
   private connectProgress(
     selectors: Array<HTMLInputElement> | undefined = undefined,
     name: string | undefined = undefined,
   ): void {
-    if (selectors === undefined) {
-      selectors = this.getSelectors()
-    }
-
-    if (name !== undefined) {
-      this.connectName(name, this.progressUpdaterMethod, selectors)
-      return
-    }
-    NoiseCanvas.progressNames.map((val) =>
-      this.connectName(val, this.progressUpdaterMethod, selectors),
-    )
+    this.connectAbstract(selectors, name, this.progressUpdaterMethod)
   }
 
+  //                All Connections
   private connectAll(): void {
     const selectors = this.getSelectors()
     this.connectValues(selectors)
     this.connectResolution(selectors)
     this.connectProgress(selectors)
   }
+  //#endregion
 
-  //    Disconnect
+  //#region     Disconnect
+  //                Base Disconnect
   private disconnectName(name: string): void {
     const slider = this.valueInputs[name]
 
@@ -353,6 +339,8 @@ abstract class NoiseCanvas extends HTMLElement {
     }
     delete this.valueInputs[name]
   }
+
+  //                All Disconnect
   private disconnectAll(): void {
     Object.values(this.valueInputs).forEach((slider: NoiseInputType) => {
       if (slider instanceof InputContainer) {
@@ -361,20 +349,53 @@ abstract class NoiseCanvas extends HTMLElement {
     })
     this.valueInputs = {}
   }
+  //#endregion
 
-  // Helper
-  //    Progress
+  //#region     Direct Attribute Updaters
+  private updateAllowCanvasDisplay(): void {
+    this.allowCanvasDisplay = !(this.getAttribute("draw") === "false")
+  }
+  //#endregion
+  //#endregion
+
+  //#region Helper Methods
+  //#region       DOM Search
+  private getInputsRoot(): Document | Element {
+    const baseRoot = this.getAttribute("inputs")
+    return baseRoot === null
+      ? document
+      : (document.querySelector(baseRoot) ?? document)
+  }
+  private getSelectors(): Array<HTMLInputElement> {
+    return Array.from(
+      this.getInputsRoot().querySelectorAll<HTMLInputElement>("input[name]"),
+    )
+  }
+  //#endregion
+
+  //#region     Base Value Accessing
+  private getValueFromType(val: NoiseInputType): string | undefined {
+    if (val === undefined) {
+      return undefined
+    }
+    if (typeof val === "string") {
+      return val
+    }
+    return val.getValue()
+  }
+  public getValue(name: string): string | undefined {
+    return this.getValueFromType(this.valueInputs[name])
+  }
+  //#endregion
+
+  //#region     Progress
   public getProgress(): number {
     return (
       Number(this.getValue(NoiseCanvas.progressNames[0])) ??
       NoiseCanvas.DEFAULT_PROGRESS
     )
   }
-  private updateAllowCanvasDisplay(): void {
-    this.allowCanvasDisplay = !(this.getAttribute("draw") === "false")
-  }
 
-  //    Create Progress Memory
   private createProgressMemory(
     countmaxIndex: number,
   ): Uint8Array | Uint16Array | Uint32Array | undefined {
@@ -387,13 +408,9 @@ abstract class NoiseCanvas extends HTMLElement {
     if (countmaxIndex <= 0xffffffff) return new Uint32Array(countmaxIndex)
     return undefined
   }
+  //#endregion
 
-  //    Index
-  protected getIndex(r: number, c: number): number {
-    return r * this.buffer.width + c
-  }
-
-  //    Canvas
+  //#region     Entire Canvus Updaters
   protected fill(v: number, a: number): void {
     const width = this.canvas.width
     const height = this.canvas.height
@@ -401,8 +418,16 @@ abstract class NoiseCanvas extends HTMLElement {
     this.ctx.fillStyle = `rgba(${v}, ${v}, ${v}, ${a.toFixed(3)})`
     this.ctx.fillRect(0, 0, width, height)
   }
+  //#endregion
 
-  //    Pixel
+  //#region     Pixel Canvus Updaters
+  //#region         Index
+  protected getIndex(r: number, c: number): number {
+    return r * this.buffer.width + c
+  }
+  //#endregion
+
+  //#region         Get Pixel
   //        Returns [Value, Alpha]
   protected getPixel(idx: number): number[] {
     idx = idx << 2
@@ -416,7 +441,9 @@ abstract class NoiseCanvas extends HTMLElement {
   protected getPixelAlpha(idx: number): number {
     return this.buffer.data[(idx << 2) + 3]
   }
+  //#endregion
 
+  //#region         Set Pixel
   protected setPixel(idx: number, v: number): void {
     const buffer = this.buffer
 
@@ -431,6 +458,10 @@ abstract class NoiseCanvas extends HTMLElement {
     buffer.data[idx + 2] = v
     buffer.data[idx + 3] = 255
   }
+  //#endregion
+  //#endregion
+
+  //#region     Buffer Copy Methods
   protected copyPixel(
     newBuffer: Uint8ClampedArray,
     oldBuffer: ImageDataArray,
@@ -451,11 +482,14 @@ abstract class NoiseCanvas extends HTMLElement {
     newBuffer[idx + 2] = 0
     newBuffer[idx + 3] = 0
   }
+  //#endregion
 
-  //    Random Help
+  //#region      Simple Random Method
   protected random8bit(): number {
     return (Math.random() * 256) | 0
   }
+  //#endregion
+  //#endregion
 }
 //#endregion
 
@@ -463,10 +497,24 @@ abstract class NoiseCanvas extends HTMLElement {
 customElements.define(
   "white-noise",
   class WhiteNoiseCanvas extends NoiseCanvas {
+    //#region Private Variables
+    private static readonly customAttributes = []
+    //#endregion
+
+    //#region Attribute Methods
     protected getValueNames(): Array<string> {
-      return []
+      return WhiteNoiseCanvas.customAttributes
     }
 
+    static get observedAttributes() {
+      return [
+        ...(super.observedAttributes || []),
+        ...WhiteNoiseCanvas.customAttributes,
+      ]
+    }
+    //#endregion
+
+    //#region Buffer Draw Method
     protected setBuffer(buffer: ImageData): void {
       const [width, height] = [buffer.width, buffer.height]
       for (let r = 0; r < height; r++) {
@@ -475,6 +523,7 @@ customElements.define(
         }
       }
     }
+    //#endregion
   },
 )
 //#endregion
@@ -483,25 +532,24 @@ customElements.define(
 customElements.define(
   "gaussian-noise",
   class GaussianNoise extends NoiseCanvas {
+    //#region Private Variables
+    private static readonly customAttributes = ["intensity"]
+    //#endregion
+
+    //#region Attribute Methods
     protected getValueNames(): Array<string> {
-      return ["intensity"]
+      return GaussianNoise.customAttributes
     }
 
     static get observedAttributes() {
-      return [...(super.observedAttributes || []), "intensity"]
+      return [
+        ...(super.observedAttributes || []),
+        ...GaussianNoise.customAttributes,
+      ]
     }
+    //#endregion
 
-    private standardNormal(): number {
-      let u = 0
-      let v = 0
-
-      while (u === 0) u = Math.random()
-      while (v === 0) v = Math.random()
-
-      // Standard Normal Distribution (mean 0, stdev 1)
-      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
-    }
-
+    //#region Buffer Draw Method
     protected setBuffer(buffer: ImageData): void {
       const [width, height] = [buffer.width, buffer.height]
       const intensity_scale = Number(this.getValue("intensity")) ?? 50
@@ -519,6 +567,20 @@ customElements.define(
         }
       }
     }
+    //#endregion
+
+    //#region Helper Methods
+    private standardNormal(): number {
+      let u = 0
+      let v = 0
+
+      while (u === 0) u = Math.random()
+      while (v === 0) v = Math.random()
+
+      // Standard Normal Distribution (mean 0, stdev 1)
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
+    }
+    //#endregion
   },
 )
 //#endregion
@@ -534,10 +596,31 @@ type RandomWalkNoiseSetPixelMethod = (
 customElements.define(
   "random-walk-noise",
   class RandomWalkNoise extends NoiseCanvas {
+    //#region Private Variables
+    private static readonly customAttributes = [
+      "sc",
+      "sr",
+      "intensity",
+      "balancePoint",
+      "pull",
+      "shape",
+    ]
+    //#endregion
+
+    //#region Attribute Methods
     protected getValueNames(): Array<string> {
-      return ["sc", "sr", "intensity", "balancePoint", "pull", "shape"]
+      return RandomWalkNoise.customAttributes
     }
 
+    static get observedAttributes() {
+      return [
+        ...(super.observedAttributes || []),
+        ...RandomWalkNoise.customAttributes,
+      ]
+    }
+    //#endregion
+
+    //#region Buffer Draw Method
     protected setBuffer(buffer: ImageData): void {
       const [width, height] = [buffer.width, buffer.height]
 
@@ -581,7 +664,9 @@ customElements.define(
           this.walkSpread(width, height, sIdx, setWalkPixel)
       }
     }
+    //#endregion
 
+    //#region Buffer Shape Draw Methods
     private walkSpread(
       width: number,
       height: number,
@@ -653,6 +738,7 @@ customElements.define(
         }
       }
     }
+    //#endregion
   },
 )
 //#endregion
