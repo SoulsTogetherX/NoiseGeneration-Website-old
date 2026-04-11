@@ -19,11 +19,13 @@ class InputContainer {
 class NoiseCanvas extends HTMLElement {
     constructor() {
         super();
-        this.memory = new Uint32Array();
         this.writeIdx = 0;
-        this.useProgress = true;
+        this.allowCanvasDisplay = true;
         this.frame = 0;
         this.valueInputs = {};
+        this.valueUpdaterMethod = this.scheduleBufferRefresh.bind(this);
+        this.resolutionUpdaterMethod = this.resizeCanvas.bind(this);
+        this.progressUpdaterMethod = this.forceDraw.bind(this);
         this.shadow = this.attachShadow({ mode: "closed" });
         this.shadow.innerHTML = `
       <style>
@@ -38,6 +40,7 @@ class NoiseCanvas extends HTMLElement {
       </style>
       <canvas></canvas>
     `;
+        this.updateAllowCanvasDisplay();
         this.canvas = this.shadow.querySelector("canvas");
         const ctx = this.canvas.getContext("2d");
         if (!ctx)
@@ -64,7 +67,7 @@ class NoiseCanvas extends HTMLElement {
             "resolutionX",
             "resolutionY",
             "progress",
-            "hide",
+            "draw",
             "useProgress",
         ];
     }
@@ -75,6 +78,14 @@ class NoiseCanvas extends HTMLElement {
                 name === "resolutionY") {
                 this.connectResolution(undefined, newValue);
                 this.resizeCanvas();
+            }
+            else if (name === "draw") {
+                this.updateAllowCanvasDisplay();
+                this.forceDraw();
+            }
+            else if (name === "useProgress") {
+                this.progressMemory = this.createProgressMemory(this.buffer.width * this.buffer.height);
+                this.forceDraw();
             }
             else if (name === "progress") {
                 this.connectProgress(undefined, newValue);
@@ -97,6 +108,7 @@ class NoiseCanvas extends HTMLElement {
         canvas.width = canvasX;
         canvas.height = canvasY;
         this.buffer = new ImageData(canvasX, canvasY);
+        this.progressMemory = this.createProgressMemory(canvasX * canvasY);
         this.scheduleBufferRefresh();
     }
     // Draw Buffer
@@ -105,12 +117,8 @@ class NoiseCanvas extends HTMLElement {
         this.frame = requestAnimationFrame(() => this.refreshBuffer());
     }
     refreshBuffer() {
-        if (this.useProgress) {
-            this.memory = new Uint32Array(this.buffer.width * this.buffer.height);
-            this.writeIdx = 0;
-        }
+        this.writeIdx = 0;
         this.setBuffer(this.buffer);
-        console.log(this.writeIdx, this.memory);
         this.forceDraw();
     }
     forceDraw() {
@@ -119,7 +127,7 @@ class NoiseCanvas extends HTMLElement {
         }
     }
     drawBuffer(buffer, progress) {
-        const memory = this.memory;
+        const memory = this.progressMemory;
         const cutoff = Math.floor(memory.length * progress);
         const copyArr = new Uint8ClampedArray(memory.length << 2);
         const dataArr = buffer.data;
@@ -134,12 +142,16 @@ class NoiseCanvas extends HTMLElement {
     }
     // Draw Frame
     drawCheck(buffer, progress) {
-        if (progress <= 0.0) {
+        if (!this.allowCanvasDisplay) {
             this.ctx.clearRect(0, 0, buffer.width, buffer.height);
             return false;
         }
-        if (progress >= 1.0) {
+        if (this.progressMemory === undefined || progress >= 1.0) {
             this.ctx.putImageData(buffer, 0, 0);
+            return false;
+        }
+        if (progress <= 0.0) {
+            this.ctx.clearRect(0, 0, buffer.width, buffer.height);
             return false;
         }
         return true;
@@ -159,10 +171,10 @@ class NoiseCanvas extends HTMLElement {
         if (val === undefined) {
             return undefined;
         }
-        if (typeof val === "number") {
+        if (typeof val === "string") {
             return val;
         }
-        return Number(val.getValue());
+        return val.getValue();
     }
     getValue(name) {
         return this.getValueFromType(this.valueInputs[name]);
@@ -175,7 +187,7 @@ class NoiseCanvas extends HTMLElement {
         const attribute = this.getAttribute(name);
         if (attribute !== null) {
             if (!isNaN(Number(attribute)) && attribute.trim() !== "") {
-                this.valueInputs[name] = Number(attribute);
+                this.valueInputs[name] = attribute;
                 return;
             }
             const sliderId = document.getElementById(attribute);
@@ -195,30 +207,30 @@ class NoiseCanvas extends HTMLElement {
             selectors = this.getSelectors();
         }
         if (name !== undefined) {
-            this.connectName(name, this.scheduleBufferRefresh.bind(this), selectors);
+            this.connectName(name, this.valueUpdaterMethod, selectors);
             return;
         }
-        this.getValueNames().map((val) => this.connectName(val, this.scheduleBufferRefresh.bind(this), selectors));
+        this.getValueNames().map((val) => this.connectName(val, this.valueUpdaterMethod, selectors));
     }
     connectResolution(selectors = undefined, name = undefined) {
         if (selectors === undefined) {
             selectors = this.getSelectors();
         }
         if (name !== undefined) {
-            this.connectName(name, this.resizeCanvas.bind(this), selectors);
+            this.connectName(name, this.resolutionUpdaterMethod, selectors);
             return;
         }
-        NoiseCanvas.resolutionNames.map((val) => this.connectName(val, this.resizeCanvas.bind(this), selectors));
+        NoiseCanvas.resolutionNames.map((val) => this.connectName(val, this.resolutionUpdaterMethod, selectors));
     }
     connectProgress(selectors = undefined, name = undefined) {
         if (selectors === undefined) {
             selectors = this.getSelectors();
         }
         if (name !== undefined) {
-            this.connectName(name, this.forceDraw.bind(this), selectors);
+            this.connectName(name, this.progressUpdaterMethod, selectors);
             return;
         }
-        NoiseCanvas.progressNames.map((val) => this.connectName(val, this.forceDraw.bind(this), selectors));
+        NoiseCanvas.progressNames.map((val) => this.connectName(val, this.progressUpdaterMethod, selectors));
     }
     connectAll() {
         const selectors = this.getSelectors();
@@ -246,11 +258,27 @@ class NoiseCanvas extends HTMLElement {
     //    Progress
     getProgress() {
         var _a;
-        return ((_a = this.getValue(NoiseCanvas.progressNames[0])) !== null && _a !== void 0 ? _a : NoiseCanvas.DEFAULT_PROGRESS);
+        return ((_a = Number(this.getValue(NoiseCanvas.progressNames[0]))) !== null && _a !== void 0 ? _a : NoiseCanvas.DEFAULT_PROGRESS);
+    }
+    updateAllowCanvasDisplay() {
+        this.allowCanvasDisplay = !(this.getAttribute("draw") === "false");
+    }
+    //    Create Progress Memory
+    createProgressMemory(countmaxIndex) {
+        if (this.getAttribute("useProgress") !== "true") {
+            return undefined;
+        }
+        if (countmaxIndex <= 0xff)
+            return new Uint8Array(countmaxIndex);
+        if (countmaxIndex <= 0xffff)
+            return new Uint16Array(countmaxIndex);
+        if (countmaxIndex <= 0xffffffff)
+            return new Uint32Array(countmaxIndex);
+        return undefined;
     }
     //    Index
     getIndex(r, c) {
-        return r * this.canvas.width + c;
+        return r * this.buffer.width + c;
     }
     //    Canvas
     fill(v, a) {
@@ -261,39 +289,36 @@ class NoiseCanvas extends HTMLElement {
     }
     //    Pixel
     //        Returns [Value, Alpha]
-    getPixel(r, c) {
-        const index = this.getIndex(r, c) << 2;
-        return [this.buffer.data[index], this.buffer.data[index + 3]];
+    getPixel(idx) {
+        idx = idx << 2;
+        return [this.buffer.data[idx], this.buffer.data[idx + 3]];
     }
     //        Returns Value
-    getPixelValue(r, c) {
-        const index = this.getIndex(r, c) << 2;
-        return this.buffer.data[index];
+    getPixelValue(idx) {
+        return this.buffer.data[idx << 2];
     }
     //        Returns Alpha
-    getPixelAlpha(r, c) {
-        const index = this.getIndex(r, c) << 2;
-        return this.buffer.data[index + 3];
+    getPixelAlpha(idx) {
+        return this.buffer.data[(idx << 2) + 3];
     }
-    setPixel(r, c, v) {
+    setPixel(idx, v) {
         const buffer = this.buffer;
-        let index = this.getIndex(r, c);
-        if (this.useProgress) {
-            this.memory[this.writeIdx] = index;
+        if (this.progressMemory !== undefined) {
+            this.progressMemory[this.writeIdx] = idx;
             this.writeIdx += 1;
         }
-        index = index << 2;
-        buffer.data[index] = v;
-        buffer.data[index + 1] = v;
-        buffer.data[index + 2] = v;
-        buffer.data[index + 3] = 255;
+        idx = idx << 2;
+        buffer.data[idx] = v;
+        buffer.data[idx + 1] = v;
+        buffer.data[idx + 2] = v;
+        buffer.data[idx + 3] = 255;
     }
     copyPixel(newBuffer, oldBuffer, idx) {
         idx = idx << 2;
         newBuffer[idx] = oldBuffer[idx];
-        newBuffer[idx + 1] = oldBuffer[idx];
-        newBuffer[idx + 2] = oldBuffer[idx];
-        newBuffer[idx + 3] = oldBuffer[idx];
+        newBuffer[idx + 1] = oldBuffer[idx + 1];
+        newBuffer[idx + 2] = oldBuffer[idx + 2];
+        newBuffer[idx + 3] = oldBuffer[idx + 3];
     }
     clearPixel(newBuffer, idx) {
         idx = idx << 2;
@@ -309,7 +334,11 @@ class NoiseCanvas extends HTMLElement {
 }
 NoiseCanvas.DEFAULT_RESOLUTION = "50";
 NoiseCanvas.DEFAULT_PROGRESS = 1.0;
-NoiseCanvas.resolutionNames = ["resolution", "resolutionX", "resolutionY"];
+NoiseCanvas.resolutionNames = [
+    "resolution",
+    "resolutionX",
+    "resolutionY",
+];
 NoiseCanvas.progressNames = ["progress"];
 //#endregion
 //#region White Noise
@@ -321,7 +350,7 @@ customElements.define("white-noise", class WhiteNoiseCanvas extends NoiseCanvas 
         const [width, height] = [buffer.width, buffer.height];
         for (let r = 0; r < height; r++) {
             for (let c = 0; c < width; c++) {
-                this.setPixel(r, c, this.random8bit());
+                this.setPixel(this.getIndex(r, c), this.random8bit());
             }
         }
     }
@@ -348,84 +377,110 @@ customElements.define("gaussian-noise", class GaussianNoise extends NoiseCanvas 
     setBuffer(buffer) {
         var _a;
         const [width, height] = [buffer.width, buffer.height];
-        const intensity_scale = (_a = this.getValue("intensity")) !== null && _a !== void 0 ? _a : 50;
+        const intensity_scale = (_a = Number(this.getValue("intensity"))) !== null && _a !== void 0 ? _a : 50;
         for (let r = 0; r < height; r++) {
             for (let c = 0; c < width; c++) {
-                this.setPixel(r, c, clamp(((this.standardNormal() * intensity_scale) | 0) + 128, 0, 255));
+                this.setPixel(this.getIndex(r, c), clamp(((this.standardNormal() * intensity_scale) | 0) + 128, 0, 255));
             }
         }
     }
 });
-//#endregion
-//#region Random Walk Noise
 customElements.define("random-walk-noise", class RandomWalkNoise extends NoiseCanvas {
     getValueNames() {
-        return ["sc", "sr", "intensity", "balancePoint", "pull"];
+        return ["sc", "sr", "intensity", "balancePoint", "pull", "shape"];
     }
     setBuffer(buffer) {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f;
         const [width, height] = [buffer.width, buffer.height];
-        const sc = clamp((_a = this.getValue("sc")) !== null && _a !== void 0 ? _a : 0, 0, width);
-        const sr = clamp((_b = this.getValue("sr")) !== null && _b !== void 0 ? _b : 0, 0, height);
-        const intensity_scale = (_c = this.getValue("intensity")) !== null && _c !== void 0 ? _c : 20;
-        const balance_point = (_d = this.getValue("balancePoint")) !== null && _d !== void 0 ? _d : 128;
-        const pull = (_e = this.getValue("pull")) !== null && _e !== void 0 ? _e : 0.99;
-        const memo = Array.from({ length: height }, () => Array(width).fill(0));
+        const shape = (_a = this.getValue("shape")) !== null && _a !== void 0 ? _a : "spread";
+        const sc = clamp(Number((_b = this.getValue("sc")) !== null && _b !== void 0 ? _b : 0), 0, width);
+        const sr = clamp(Number((_c = this.getValue("sr")) !== null && _c !== void 0 ? _c : 0), 0, height);
+        const sIdx = this.getIndex(sr, sc);
+        const intensityScale = Number((_d = this.getValue("intensity")) !== null && _d !== void 0 ? _d : 20);
+        const balancePoint = Number((_e = this.getValue("balancePoint")) !== null && _e !== void 0 ? _e : 128);
+        const pull = Number((_f = this.getValue("pull")) !== null && _f !== void 0 ? _f : 0.99);
+        const setWalkPixel = (sum, count, idx, memo) => {
+            const value = clamp((count === 0 ? this.random8bit() - balancePoint : sum / count) *
+                pull +
+                (Math.random() * 2 - 1) * intensityScale, -balancePoint, 255 - balancePoint);
+            memo[idx] = value;
+            this.setPixel(idx, (value + balancePoint) | 0);
+        };
+        switch (shape) {
+            case "diagonal":
+                break;
+            case "revDiagonal":
+                break;
+            case "horizontal":
+                break;
+            case "vertical":
+                break;
+            case "spread":
+            default:
+                this.walkSpread(width, height, sIdx, setWalkPixel);
+        }
+    }
+    walkSpread(width, height, sIdx, setWalkPixel) {
+        const memo = Array(width * height).fill(0);
         this.fill(0, 0);
-        const stack = [[sr, sc]];
-        while (stack.length > 0) {
-            const [r, c] = stack.pop();
-            let count = 0;
-            let sum = 0;
-            if (r > 0) {
-                const alpha = this.getPixelAlpha(r - 1, c);
-                if (alpha > 0) {
-                    sum += memo[r - 1][c];
-                    count += 1;
+        let open = [sIdx];
+        let closed = [];
+        while (open.length > 0) {
+            closed = open;
+            open = [];
+            while (closed.length > 0) {
+                const currentIdx = closed.pop();
+                const [r, c] = [Math.floor(currentIdx / width), currentIdx % width];
+                let count = 0;
+                let sum = 0;
+                if (this.getPixelAlpha(currentIdx) > 0)
+                    continue;
+                if (r > 0) {
+                    const idx = this.getIndex(r - 1, c);
+                    const alpha = this.getPixelAlpha(idx);
+                    if (alpha > 0) {
+                        sum += memo[idx];
+                        count += 1;
+                    }
+                    else {
+                        open.push(idx);
+                    }
                 }
-                else {
-                    stack.push([r - 1, c]);
+                if (c > 0) {
+                    const idx = this.getIndex(r, c - 1);
+                    const alpha = this.getPixelAlpha(idx);
+                    if (alpha > 0) {
+                        sum += memo[idx];
+                        count += 1;
+                    }
+                    else {
+                        open.push(idx);
+                    }
                 }
+                if (r < height - 1) {
+                    const idx = this.getIndex(r + 1, c);
+                    const alpha = this.getPixelAlpha(idx);
+                    if (alpha > 0) {
+                        sum += memo[idx];
+                        count += 1;
+                    }
+                    else {
+                        open.push(idx);
+                    }
+                }
+                if (c < width - 1) {
+                    const idx = this.getIndex(r, c + 1);
+                    const alpha = this.getPixelAlpha(idx);
+                    if (alpha > 0) {
+                        sum += memo[idx];
+                        count += 1;
+                    }
+                    else {
+                        open.push(idx);
+                    }
+                }
+                setWalkPixel(sum, count, currentIdx, memo);
             }
-            if (c > 0) {
-                const alpha = this.getPixelAlpha(r, c - 1);
-                if (alpha > 0) {
-                    sum += memo[r][c - 1];
-                    count += 1;
-                }
-                else {
-                    stack.push([r, c - 1]);
-                }
-            }
-            if (r < height - 1) {
-                const alpha = this.getPixelAlpha(r + 1, c);
-                if (alpha > 0) {
-                    sum += memo[r + 1][c];
-                    count += 1;
-                }
-                else {
-                    stack.push([r + 1, c]);
-                }
-            }
-            if (c < width - 1) {
-                const alpha = this.getPixelAlpha(r, c + 1);
-                if (alpha > 0) {
-                    sum += memo[r][c + 1];
-                    count += 1;
-                }
-                else {
-                    stack.push([r, c + 1]);
-                }
-            }
-            if (count == 0) {
-                const value = this.random8bit() - balance_point;
-                this.setPixel(r, c, value);
-                memo[r][c] = value;
-                continue;
-            }
-            const value = clamp((sum / count) * pull + (Math.random() * 2 - 1) * intensity_scale, -balance_point, 255 - balance_point);
-            memo[r][c] = value;
-            this.setPixel(r, c, (value + balance_point) | 0);
         }
     }
 });
