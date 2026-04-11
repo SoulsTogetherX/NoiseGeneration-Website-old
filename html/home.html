@@ -19,7 +19,7 @@
     <nav>
       <ul class="nav-ul">
         <li class="active">
-          <a href="home.html" aria-current="page">
+          <a aria-current="page">
             <span>Home</span>
           </a>
         </li>
@@ -41,9 +41,40 @@
       </ul>
     </nav>
     <div id="main-content">
-      <div>
-        <gaussian-noise class="noise-holder"></gaussian-noise>
+      <header></header>
+      <div id="content">
+        <white-noise
+          class="noise-holder"
+          inputsRoot="#noise-inputs"
+        ></white-noise>
+        <div id="noise-inputs">
+          <input
+            type="range"
+            name="progress"
+            min="0"
+            max="1"
+            value="1.0"
+            step="0.001"
+          />
+          <input
+            type="range"
+            name="resolution"
+            min="50"
+            max="600"
+            value="300"
+            step="1"
+          />
+          <input
+            type="range"
+            name="intensity"
+            min="0"
+            max="255"
+            value="50"
+            step="0.1"
+          />
+        </div>
       </div>
+      <footer></footer>
     </div>
     <!-- Scripts -->
     <script src="../dist/scripts.js"></script>

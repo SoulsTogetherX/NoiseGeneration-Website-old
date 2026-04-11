@@ -2,7 +2,7 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     "target": "ES6",
-    "lib": ["es2015", "dom"],
+    "lib": ["es2017", "dom"],
     "rootDir": "./src",
     "outDir": "./dist"
   }

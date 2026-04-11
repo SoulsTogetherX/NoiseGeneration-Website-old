@@ -1,15 +1,49 @@
+//#region Helper Methods
 const clamp = (num: number, min: number, max: number) =>
   Math.min(Math.max(num, min), max)
+//#endregion
+
+//#region Noise Canvases
+//#region Abstract
+class InputContainer {
+  private inputElement: HTMLInputElement
+  private onUpdateMethod: () => void
+
+  constructor(inputElement: HTMLInputElement, onUpdate: () => void) {
+    this.inputElement = inputElement
+    this.onUpdateMethod = onUpdate
+
+    this.inputElement.addEventListener("input", this.onUpdateMethod)
+  }
+
+  public disconnectUpdateMethod(): void {
+    this.inputElement.removeEventListener("input", this.onUpdateMethod)
+  }
+  public getValue(): string {
+    return this.inputElement.value
+  }
+}
+
+type NoiseInputType = InputContainer | number | undefined
 
 abstract class NoiseCanvas extends HTMLElement {
+  private static DEFAULT_RESOLUTION = "50"
+  private static DEFAULT_PROGRESS = 1.0
+
   protected shadow: ShadowRoot
   protected canvas: HTMLCanvasElement
   protected ctx: CanvasRenderingContext2D
 
   private buffer: ImageData
+  private memory: Uint32Array = new Uint32Array()
+  private writeIdx: number = 0
+  private useProgress: boolean = true
 
-  private resizeObserver?: ResizeObserver
-  private frame = 0
+  private frame: number = 0
+
+  private static resolutionNames = ["resolution", "resolutionX", "resolutionY"]
+  private static progressNames = ["progress"]
+  private valueInputs: Record<string, NoiseInputType> = {}
 
   constructor() {
     super()
@@ -21,99 +55,304 @@ abstract class NoiseCanvas extends HTMLElement {
           width: 100%;
           height: 100%;
           object-fit: contain;
+          pointer-events: none;
+          user-select: none;
+          image-rendering: pixelated;
         }
       </style>
       <canvas></canvas>
     `
 
     this.canvas = this.shadow.querySelector("canvas")!
-    console.log(this.canvas)
     const ctx = this.canvas.getContext("2d")
     if (!ctx) throw new Error("2D canvas context not available")
 
+    ctx.imageSmoothingEnabled = false
     this.ctx = ctx
     this.buffer = new ImageData(1, 1)
   }
 
-  // abstract
-  protected abstract connectSliders(): void
-
-  protected abstract draw(width: number, height: number): void
+  // Abstract
+  protected abstract setBuffer(buffer: ImageData): void
 
   // Dom Enter/Exit
-  connectedCallback() {
+  connectedCallback(): void {
+    this.connectAll()
     this.resizeCanvas()
-    this.redraw()
-
-    this.resizeObserver = new ResizeObserver(() => this.resizeCanvas())
-    this.resizeObserver.observe(this)
+    this.refreshBuffer()
   }
-
-  disconnectedCallback() {
-    this.resizeObserver?.disconnect()
+  disconnectedCallback(): void {
     cancelAnimationFrame(this.frame)
+
+    this.disconnectAll()
   }
 
   // Attribute Changes
   static get observedAttributes() {
-    return ["slider-container-id"]
+    return [
+      "inputsRoot",
+      "resolution",
+      "resolutionX",
+      "resolutionY",
+      "progress",
+      "hide",
+      "useProgress",
+    ]
   }
 
-  attributeChangedCallback(name: string, oldValue: string, newValue: string) {
+  attributeChangedCallback(
+    name: string,
+    oldValue: string,
+    newValue: string,
+  ): void {
     if (oldValue !== newValue) {
-      if (name === "slider-container-id") {
-        this.updateSliderContainer(newValue)
+      if (
+        name === "resolution" ||
+        name === "resolutionX" ||
+        name === "resolutionY"
+      ) {
+        this.connectResolution(undefined, newValue)
+        this.resizeCanvas()
+      } else if (name === "hide" || name === "useProgress") {
+        // TODO: hide, this.useProgress
+
+        this.forceDraw()
+      } else if (name === "progress") {
+        this.connectProgress(undefined, newValue)
+        this.forceDraw()
+      } else if (this.getValueNames().includes(name)) {
+        this.connectValues(undefined, newValue)
+        this.scheduleBufferRefresh()
       }
     }
   }
 
-  get sliderContainerId() {
-    return this.getAttribute("slider-container-id")
-  }
-
-  set sliderContainerId(val) {
-    this.setAttribute("slider-container-id", val!)
-  }
-
   // Canvas
-  private resizeCanvas() {
-    const rect = this.canvas.getBoundingClientRect()
-    const dpr = window.devicePixelRatio || 1
+  private resizeCanvas(): void {
+    const canvas = this.canvas
+    const [resolution, resolutionX, resolutionY] = NoiseCanvas.resolutionNames
 
-    this.canvas.width = Math.max(1, Math.floor(rect.width * dpr))
-    this.canvas.height = Math.max(1, Math.floor(rect.height * dpr))
-
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-    this.buffer = this.ctx.createImageData(
-      this.canvas.width,
-      this.canvas.height,
+    const baseResolution = this.getValue(resolution)
+    const canvasX = Number(
+      this.getValue(resolutionX) ??
+        baseResolution ??
+        NoiseCanvas.DEFAULT_RESOLUTION,
+    )
+    const canvasY = Number(
+      this.getValue(resolutionY) ??
+        baseResolution ??
+        NoiseCanvas.DEFAULT_RESOLUTION,
     )
 
-    this.scheduleDraw()
+    canvas.width = canvasX
+    canvas.height = canvasY
+    this.buffer = new ImageData(canvasX, canvasY)
+
+    this.scheduleBufferRefresh()
   }
 
-  // Draw
-  private scheduleDraw() {
+  // Draw Buffer
+  private scheduleBufferRefresh(): void {
     cancelAnimationFrame(this.frame)
-    this.frame = requestAnimationFrame(() => this.redraw())
+    this.frame = requestAnimationFrame(() => this.refreshBuffer())
   }
 
-  private redraw() {
-    const width = this.canvas.width
-    const height = this.canvas.height
+  private refreshBuffer(): void {
+    if (this.useProgress) {
+      this.memory = new Uint32Array(this.buffer.width * this.buffer.height)
+      this.writeIdx = 0
+    }
 
-    this.draw(width, height)
-    this.ctx.putImageData(this.buffer, 0, 0)
+    this.setBuffer(this.buffer)
+    this.forceDraw()
+  }
+  private forceDraw(): void {
+    if (this.drawCheck(this.buffer, this.getProgress())) {
+      this.drawBuffer(this.buffer, this.getProgress())
+    }
+  }
+  private drawBuffer(buffer: ImageData, progress: number): void {
+    const memory = this.memory
+    const cutoff: number = Math.floor(memory.length * progress)
+    const copyArr = new Uint8ClampedArray(memory.length << 2)
+    const dataArr = buffer.data
+
+    let i = 0
+    for (; i < cutoff; i++) {
+      this.copyPixel(copyArr, dataArr, memory[i])
+    }
+    for (; i < memory.length; i++) {
+      this.clearPixel(copyArr, memory[i])
+    }
+
+    this.ctx.putImageData(
+      new ImageData(copyArr, buffer.width, buffer.height),
+      0,
+      0,
+    )
   }
 
-  // Sliders
-  updateSliderContainer(newId: string) {}
+  // Draw Frame
+  private drawCheck(buffer: ImageData, progress: number): boolean {
+    if (progress <= 0.0) {
+      this.ctx.clearRect(0, 0, buffer.width, buffer.height)
+      return false
+    }
+    if (progress >= 1.0) {
+      this.ctx.putImageData(buffer, 0, 0)
+      return false
+    }
+    return true
+  }
+
+  // ValueTypes
+  private getInputsRoot(): Document | Element {
+    const baseRoot = this.getAttribute("inputs")
+    return baseRoot === null
+      ? document
+      : (document.querySelector(baseRoot) ?? document)
+  }
+  private getSelectors(): Array<HTMLInputElement> {
+    return Array.from(
+      this.getInputsRoot().querySelectorAll<HTMLInputElement>("input[name]"),
+    )
+  }
+
+  //    Value
+  protected abstract getValueNames(): Array<string>
+  private getValueFromType(val: NoiseInputType): number | undefined {
+    if (val === undefined) {
+      return undefined
+    }
+    if (typeof val === "number") {
+      return val
+    }
+    return Number(val.getValue())
+  }
+  public getValue(name: string): number | undefined {
+    return this.getValueFromType(this.valueInputs[name])
+  }
+
+  //    Connect
+  private connectName(
+    name: string,
+    onUpdate: () => void,
+    fallback: Array<HTMLInputElement>,
+  ): void {
+    if (name in this.valueInputs) {
+      this.disconnectName(name)
+    }
+
+    const attribute = this.getAttribute(name)
+    if (attribute !== null) {
+      if (!isNaN(Number(attribute)) && attribute.trim() !== "") {
+        this.valueInputs[name] = Number(attribute)
+        return
+      }
+
+      const sliderId = document.getElementById(attribute)
+      if (sliderId !== null) {
+        this.valueInputs[name] = new InputContainer(
+          sliderId as HTMLInputElement,
+          onUpdate,
+        )
+        return
+      }
+    }
+
+    const slider: HTMLInputElement | undefined = fallback.find(
+      (val: HTMLInputElement) => val.name === name,
+    )
+    if (slider !== undefined) {
+      this.valueInputs[name] = new InputContainer(slider, onUpdate)
+      return
+    }
+  }
+
+  private connectValues(
+    selectors: Array<HTMLInputElement> | undefined = undefined,
+    name: string | undefined = undefined,
+  ): void {
+    if (selectors === undefined) {
+      selectors = this.getSelectors()
+    }
+
+    if (name !== undefined) {
+      this.connectName(name, this.scheduleBufferRefresh.bind(this), selectors)
+      return
+    }
+    this.getValueNames().map((val) =>
+      this.connectName(val, this.scheduleBufferRefresh.bind(this), selectors),
+    )
+  }
+  private connectResolution(
+    selectors: Array<HTMLInputElement> | undefined = undefined,
+    name: string | undefined = undefined,
+  ): void {
+    if (selectors === undefined) {
+      selectors = this.getSelectors()
+    }
+
+    if (name !== undefined) {
+      this.connectName(name, this.resizeCanvas.bind(this), selectors)
+      return
+    }
+    NoiseCanvas.resolutionNames.map((val) =>
+      this.connectName(val, this.resizeCanvas.bind(this), selectors),
+    )
+  }
+  private connectProgress(
+    selectors: Array<HTMLInputElement> | undefined = undefined,
+    name: string | undefined = undefined,
+  ): void {
+    if (selectors === undefined) {
+      selectors = this.getSelectors()
+    }
+
+    if (name !== undefined) {
+      this.connectName(name, this.forceDraw.bind(this), selectors)
+      return
+    }
+    NoiseCanvas.progressNames.map((val) =>
+      this.connectName(val, this.forceDraw.bind(this), selectors),
+    )
+  }
+  private connectAll(): void {
+    const selectors = this.getSelectors()
+    this.connectValues(selectors)
+    this.connectResolution(selectors)
+    this.connectProgress(selectors)
+  }
+
+  //    Disconnect
+  private disconnectName(name: string): void {
+    const slider = this.valueInputs[name]
+
+    if (slider instanceof InputContainer) {
+      slider.disconnectUpdateMethod()
+    }
+    delete this.valueInputs[name]
+  }
+  private disconnectAll(): void {
+    Object.values(this.valueInputs).forEach((slider: NoiseInputType) => {
+      if (slider instanceof InputContainer) {
+        slider.disconnectUpdateMethod()
+      }
+    })
+    this.valueInputs = {}
+  }
 
   // Helper
+  //    Progress
+  public getProgress(): number {
+    return (
+      this.getValue(NoiseCanvas.progressNames[0]) ??
+      NoiseCanvas.DEFAULT_PROGRESS
+    )
+  }
   //    Index
   private getIndex(r: number, c: number): number {
-    return (r * this.canvas.width + c) << 2
+    return r * this.canvas.width + c
   }
 
   //    Canvas
@@ -128,40 +367,73 @@ abstract class NoiseCanvas extends HTMLElement {
   //    Pixel
   //        Returns [Value, Alpha]
   protected getPixel(r: number, c: number): number[] {
-    const index = this.getIndex(r, c)
+    const index = this.getIndex(r, c) << 2
     return [this.buffer.data[index], this.buffer.data[index + 3]]
   }
   //        Returns Value
   protected getPixelValue(r: number, c: number): number {
-    const index = this.getIndex(r, c)
+    const index = this.getIndex(r, c) << 2
     return this.buffer.data[index]
   }
   //        Returns Alpha
   protected getPixelAlpha(r: number, c: number): number {
-    const index = this.getIndex(r, c)
+    const index = this.getIndex(r, c) << 2
     return this.buffer.data[index + 3]
   }
 
   protected setPixel(r: number, c: number, v: number): void {
     const buffer = this.buffer
 
-    const index = this.getIndex(r, c)
+    let index = this.getIndex(r, c)
+    if (this.useProgress) {
+      this.memory[this.writeIdx] = index
+      this.writeIdx += 1
+    }
+
+    index = index << 2
     buffer.data[index] = v
     buffer.data[index + 1] = v
     buffer.data[index + 2] = v
     buffer.data[index + 3] = 255
   }
+  protected copyPixel(
+    newBuffer: Uint8ClampedArray,
+    oldBuffer: ImageDataArray,
+    idx: number,
+  ): void {
+    idx = idx << 2
+
+    newBuffer[idx] = oldBuffer[idx]
+    newBuffer[idx + 1] = oldBuffer[idx]
+    newBuffer[idx + 2] = oldBuffer[idx]
+    newBuffer[idx + 3] = oldBuffer[idx]
+  }
+  protected clearPixel(newBuffer: Uint8ClampedArray, idx: number): void {
+    idx = idx << 2
+
+    newBuffer[idx] = 0
+    newBuffer[idx + 1] = 0
+    newBuffer[idx + 2] = 0
+    newBuffer[idx + 3] = 0
+  }
+
+  //    Random Help
   protected random8bit(): number {
     return (Math.random() * 256) | 0
   }
 }
+//#endregion
 
+//#region White Noise
 customElements.define(
   "white-noise",
   class WhiteNoiseCanvas extends NoiseCanvas {
-    protected connectSliders(): void {}
+    protected getValueNames(): Array<string> {
+      return []
+    }
 
-    protected draw(width: number, height: number): void {
+    protected setBuffer(buffer: ImageData): void {
+      const [width, height] = [buffer.width, buffer.height]
       for (let r = 0; r < height; r++) {
         for (let c = 0; c < width; c++) {
           this.setPixel(r, c, this.random8bit())
@@ -170,11 +442,19 @@ customElements.define(
     }
   },
 )
+//#endregion
 
+//#region Gaussian Noise
 customElements.define(
   "gaussian-noise",
   class GaussianNoise extends NoiseCanvas {
-    private intensity_scale: number = 50
+    protected getValueNames(): Array<string> {
+      return ["intensity"]
+    }
+
+    static get observedAttributes() {
+      return [...(super.observedAttributes || []), "intensity"]
+    }
 
     private standardNormal(): number {
       let u = 0
@@ -187,10 +467,9 @@ customElements.define(
       return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
     }
 
-    protected connectSliders(): void {}
-
-    protected draw(width: number, height: number): void {
-      const intensity_scale = this.intensity_scale
+    protected setBuffer(buffer: ImageData): void {
+      const [width, height] = [buffer.width, buffer.height]
+      const intensity_scale = this.getValue("intensity") ?? 50
 
       for (let r = 0; r < height; r++) {
         for (let c = 0; c < width; c++) {
@@ -208,26 +487,24 @@ customElements.define(
     }
   },
 )
+//#endregion
 
+//#region Random Walk Noise
 customElements.define(
   "random-walk-noise",
   class RandomWalkNoise extends NoiseCanvas {
-    private sc: number = 0
-    private sr: number = 0
-    private intensity_scale: number = 20
-    private balance_point: number = 128
-    private pull: number = 0.99
+    protected getValueNames(): Array<string> {
+      return ["sc", "sr", "intensity", "balancePoint", "pull"]
+    }
 
-    protected connectSliders(): void {}
+    protected setBuffer(buffer: ImageData): void {
+      const [width, height] = [buffer.width, buffer.height]
 
-    protected draw(width: number, height: number): void {
-      const [sc, sr, intensity_scale, balance_point, pull] = [
-        clamp(this.sc, 0, width),
-        clamp(this.sr, 0, height),
-        this.intensity_scale,
-        this.balance_point,
-        this.pull,
-      ]
+      const sc = clamp(this.getValue("sc") ?? 0, 0, width)
+      const sr = clamp(this.getValue("sr") ?? 0, 0, height)
+      const intensity_scale = this.getValue("intensity") ?? 20
+      const balance_point = this.getValue("balancePoint") ?? 128
+      const pull = this.getValue("pull") ?? 0.99
 
       const memo: number[][] = Array.from({ length: height }, () =>
         Array(width).fill(0),
@@ -297,3 +574,5 @@ customElements.define(
     }
   },
 )
+//#endregion
+//#endregion
