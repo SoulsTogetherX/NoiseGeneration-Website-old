@@ -282,22 +282,20 @@ abstract class NoiseCanvas extends HTMLElement {
       return
     }
   }
-  private connectAbstract(
+  private connectTemplate(
     selectors: Array<HTMLInputElement> | undefined = undefined,
-    name: string | undefined = undefined,
+    names: string | Array<string>,
     onUpdate: () => void,
   ): void {
     if (selectors === undefined) {
       selectors = this.getSelectors()
     }
 
-    if (name !== undefined) {
-      this.connectName(name, onUpdate, selectors)
+    if (typeof names === "string") {
+      this.connectName(names, onUpdate, selectors)
       return
     }
-    this.getValueNames().map((val) =>
-      this.connectName(val, onUpdate, selectors),
-    )
+    names.map((val) => this.connectName(val, onUpdate, selectors))
   }
 
   //                Types of Connections
@@ -305,19 +303,31 @@ abstract class NoiseCanvas extends HTMLElement {
     selectors: Array<HTMLInputElement> | undefined = undefined,
     name: string | undefined = undefined,
   ): void {
-    this.connectAbstract(selectors, name, this.valueUpdaterMethod)
+    this.connectTemplate(
+      selectors,
+      name ?? this.getValueNames(),
+      this.valueUpdaterMethod.bind(this),
+    )
   }
   private connectResolution(
     selectors: Array<HTMLInputElement> | undefined = undefined,
     name: string | undefined = undefined,
   ): void {
-    this.connectAbstract(selectors, name, this.resolutionUpdaterMethod)
+    this.connectTemplate(
+      selectors,
+      name ?? NoiseCanvas.resolutionNames,
+      this.resolutionUpdaterMethod.bind(this),
+    )
   }
   private connectProgress(
     selectors: Array<HTMLInputElement> | undefined = undefined,
     name: string | undefined = undefined,
   ): void {
-    this.connectAbstract(selectors, name, this.progressUpdaterMethod)
+    this.connectTemplate(
+      selectors,
+      name ?? NoiseCanvas.progressNames,
+      this.progressUpdaterMethod.bind(this),
+    )
   }
 
   //                All Connections
@@ -359,7 +369,7 @@ abstract class NoiseCanvas extends HTMLElement {
   //#endregion
 
   //#region Helper Methods
-  //#region       DOM Search
+  //#region     DOM Search
   private getInputsRoot(): Document | Element {
     const baseRoot = this.getAttribute("inputs")
     return baseRoot === null
@@ -390,9 +400,9 @@ abstract class NoiseCanvas extends HTMLElement {
 
   //#region     Progress
   public getProgress(): number {
-    return (
-      Number(this.getValue(NoiseCanvas.progressNames[0])) ??
-      NoiseCanvas.DEFAULT_PROGRESS
+    return Number(
+      this.getValue(NoiseCanvas.progressNames[0]) ??
+        NoiseCanvas.DEFAULT_PROGRESS,
     )
   }
 
@@ -406,11 +416,14 @@ abstract class NoiseCanvas extends HTMLElement {
     if (countmaxIndex <= 0xff) return new Uint8Array(countmaxIndex)
     if (countmaxIndex <= 0xffff) return new Uint16Array(countmaxIndex)
     if (countmaxIndex <= 0xffffffff) return new Uint32Array(countmaxIndex)
-    return undefined
+
+    throw new Error(
+      "Cannot save the progress of a canvas with more than 0xffffffff pixels.",
+    )
   }
   //#endregion
 
-  //#region     Entire Canvus Updaters
+  //#region     Entire Canvas Updaters
   protected fill(v: number, a: number): void {
     const width = this.canvas.width
     const height = this.canvas.height
@@ -484,7 +497,7 @@ abstract class NoiseCanvas extends HTMLElement {
   }
   //#endregion
 
-  //#region      Simple Random Method
+  //#region     Simple Random Method
   protected random8bit(): number {
     return (Math.random() * 256) | 0
   }
@@ -552,7 +565,7 @@ customElements.define(
     //#region Buffer Draw Method
     protected setBuffer(buffer: ImageData): void {
       const [width, height] = [buffer.width, buffer.height]
-      const intensity_scale = Number(this.getValue("intensity")) ?? 50
+      const intensity_scale = Number(this.getValue("intensity") ?? 50)
 
       for (let r = 0; r < height; r++) {
         for (let c = 0; c < width; c++) {
@@ -587,11 +600,20 @@ customElements.define(
 
 //#region Random Walk Noise
 type RandomWalkNoiseSetPixelMethod = (
-  sum: number,
-  count: number,
+  pInfo: [number, number],
   idx: number,
   memo: number[],
 ) => void
+type RandomWalkNoiseProcessPixelLocation = (
+  idx: number,
+  pInfo: [number, number],
+) => [number, number]
+type RandomWalkNoiseProcessWalkDirection = (
+  r: number,
+  c: number,
+  pInfo: [number, number],
+  processLocation: RandomWalkNoiseProcessPixelLocation,
+) => [number, number]
 
 customElements.define(
   "random-walk-noise",
@@ -634,13 +656,14 @@ customElements.define(
       const pull = Number(this.getValue("pull") ?? 0.99)
 
       const setWalkPixel: RandomWalkNoiseSetPixelMethod = (
-        sum: number,
-        count: number,
+        pInfo: [number, number],
         idx: number,
         memo: number[],
       ): void => {
         const value = clamp(
-          (count === 0 ? this.random8bit() - balancePoint : sum / count) *
+          (pInfo[1] === 0
+            ? this.random8bit() - balancePoint
+            : pInfo[0] / pInfo[1]) *
             pull +
             (Math.random() * 2 - 1) * intensityScale,
           -balancePoint,
@@ -659,6 +682,10 @@ customElements.define(
           break
         case "vertical":
           break
+        case "spiral":
+          break
+        case "revSpiral":
+          break
         case "spread":
         default:
           this.walkSpread(width, height, sIdx, setWalkPixel)
@@ -667,17 +694,32 @@ customElements.define(
     //#endregion
 
     //#region Buffer Shape Draw Methods
-    private walkSpread(
+    private walkTemplate(
       width: number,
       height: number,
       sIdx: number,
       setWalkPixel: RandomWalkNoiseSetPixelMethod,
+      processWalkDirection: RandomWalkNoiseProcessWalkDirection,
     ): void {
       const memo: number[] = Array(width * height).fill(0)
       this.fill(0, 0)
 
       let open: number[] = [sIdx]
       let closed: number[] = []
+
+      const processPixelLocation = (
+        idx: number,
+        pInfo: [number, number],
+      ): [number, number] => {
+        const alpha = this.getPixelAlpha(idx)
+        if (alpha > 0) {
+          pInfo[0] += memo[idx]
+          pInfo[1] += 1
+        } else {
+          open.push(idx)
+        }
+        return pInfo
+      }
 
       while (open.length > 0) {
         closed = open
@@ -687,56 +729,49 @@ customElements.define(
           const currentIdx = closed.pop()!
           const [r, c] = [Math.floor(currentIdx / width), currentIdx % width]
 
-          let count: number = 0
-          let sum: number = 0
+          let pInfo: [number, number] = [0, 0]
 
           if (this.getPixelAlpha(currentIdx) > 0) continue
+          processWalkDirection(r, c, pInfo, processPixelLocation)
+          setWalkPixel(pInfo, currentIdx, memo)
+        }
+      }
+    }
 
+    private walkSpread(
+      width: number,
+      height: number,
+      sIdx: number,
+      setWalkPixel: RandomWalkNoiseSetPixelMethod,
+    ): void {
+      this.walkTemplate(
+        width,
+        height,
+        sIdx,
+        setWalkPixel,
+        (
+          r: number,
+          c: number,
+          pInfo: [number, number],
+          processPixelLocation: RandomWalkNoiseProcessPixelLocation,
+        ): [number, number] => {
           if (r > 0) {
-            const idx = this.getIndex(r - 1, c)
-            const alpha = this.getPixelAlpha(idx)
-            if (alpha > 0) {
-              sum += memo[idx]
-              count += 1
-            } else {
-              open.push(idx)
-            }
+            pInfo = processPixelLocation(this.getIndex(r - 1, c), pInfo)
           }
           if (c > 0) {
-            const idx = this.getIndex(r, c - 1)
-            const alpha = this.getPixelAlpha(idx)
-            if (alpha > 0) {
-              sum += memo[idx]
-              count += 1
-            } else {
-              open.push(idx)
-            }
+            pInfo = processPixelLocation(this.getIndex(r, c - 1), pInfo)
           }
 
           if (r < height - 1) {
-            const idx = this.getIndex(r + 1, c)
-            const alpha = this.getPixelAlpha(idx)
-            if (alpha > 0) {
-              sum += memo[idx]
-              count += 1
-            } else {
-              open.push(idx)
-            }
+            pInfo = processPixelLocation(this.getIndex(r + 1, c), pInfo)
           }
           if (c < width - 1) {
-            const idx = this.getIndex(r, c + 1)
-            const alpha = this.getPixelAlpha(idx)
-            if (alpha > 0) {
-              sum += memo[idx]
-              count += 1
-            } else {
-              open.push(idx)
-            }
+            pInfo = processPixelLocation(this.getIndex(r, c + 1), pInfo)
           }
 
-          setWalkPixel(sum, count, currentIdx, memo)
-        }
-      }
+          return pInfo
+        },
+      )
     }
     //#endregion
   },
