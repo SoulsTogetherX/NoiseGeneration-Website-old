@@ -15,8 +15,8 @@
 
     <link rel="stylesheet" href="../assets/css/styles.css" />
   </head>
-  <body>
-    <nav>
+  <body class="flex-row">
+    <nav id="nav-bar">
       <ul class="nav-ul">
         <li class="active">
           <a aria-current="page">
@@ -40,42 +40,51 @@
         </li>
       </ul>
     </nav>
-    <div id="main-content">
-      <header></header>
-      <div id="content">
-        <random-walk-noise
-          class="noise-holder"
-          inputsRoot="#noise-inputs"
-          useProgress="true"
-        ></random-walk-noise>
-        <div id="noise-inputs">
-          <input
-            type="range"
-            name="progress"
-            min="0"
-            max="1"
-            value="1.0"
-            step="0.001"
-          />
-          <input
-            type="range"
-            name="resolution"
-            min="50"
-            max="600"
-            value="300"
-            step="1"
-          />
-          <input
-            type="range"
-            name="intensity"
-            min="0"
-            max="255"
-            value="50"
-            step="0.1"
-          />
-        </div>
+    <div id="content-wrapper">
+      <div class="content-body">
+        <header class="flex-col max-expand">
+          <h1 id="home-h1">
+            <p>Hello to all fellow</p>
+            <p>enthusiasts.</p>
+          </h1>
+          <div id="home-text">
+            <p>
+              I was inspired after watching a <a>Youtube video</a> related to
+              created 2D Noise Textures, believing I could compile and expanded
+              collection.
+            </p>
+            <p>
+              Check the <a>glossary</a> for any basic terms you may not know.
+            </p>
+          </div>
+
+          <white-noise
+            class="noise-holder"
+            inputsRoot="#noise-inputs"
+            useProgress="true"
+          ></white-noise>
+          <div id="noise-inputs">
+            <input
+              type="range"
+              name="progressRatio"
+              min="0"
+              max="1"
+              value="1.0"
+              step="0.001"
+            />
+            <input
+              type="range"
+              name="resolution"
+              min="50"
+              max="600"
+              value="50"
+              step="1"
+            />
+          </div>
+        </header>
       </div>
       <footer></footer>
+      <div class="links-bar"></div>
     </div>
     <!-- Scripts -->
     <script src="../dist/scripts.js"></script>

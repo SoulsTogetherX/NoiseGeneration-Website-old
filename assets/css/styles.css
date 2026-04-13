@@ -1,3 +1,20 @@
+/*#region Palettes */
+/*    Light Palette */
+:root {
+  --nav-bg: #ffe4c4;
+  --bg-dark: #988164;
+  --bg-light: #cab192;
+
+  --primary-text: #0d0d0d;
+  --seconary-text: #333333;
+
+  --primary-accent: #b7a99a;
+  --seconary-accent: #9ab0a7;
+  --highlight: #a7d6c3;
+}
+/*#endregion*/
+
+/*#region Global Styles */
 * {
   text-decoration: none;
   box-sizing: border-box;
@@ -9,33 +26,49 @@
 }
 
 :root {
-  --nav-width: max(15vw, 8rem);
-}
+  color-scheme: light dark;
 
-body {
+  --nav-width: max(15vw, 8rem);
+  --links-width: 3rem;
+
+  background-color: var(--bg-dark);
+  color: var(--primary-text);
+}
+/*#endregion*/
+
+/*#region Helper Styles */
+.flex-row {
   display: flex;
   flex-direction: row;
 }
-
-#main-content {
-  margin-left: var(--nav-width);
-  width: 100%;
+.flex-col {
+  display: flex;
+  flex-direction: column;
 }
 
-nav {
+.max-expand {
+  width: 100%;
+  height: 100%;
+}
+/*#endregion*/
+
+/*#region Nav Bar */
+#nav-bar {
+  display: block;
   position: fixed;
+  z-index: 1;
+
+  padding: 1rem 0.5rem;
 
   width: var(--nav-width);
   height: 100%;
 
-  padding: 1rem 0.5rem;
-  background-color: bisque;
+  background-color: var(--nav-bg);
 }
-
-.nav-ul {
+#nav-bar .nav-ul {
   align-items: center;
 }
-.nav-ul li {
+#nav-bar .nav-ul li {
   list-style-type: none;
   text-align: center;
 
@@ -43,12 +76,56 @@ nav {
 
   margin: 0.5rem 0rem;
 }
+/*#endregion*/
 
-a {
-  color: inherit;
-  text-decoration: none;
-  cursor: inherit;
+/*#region Home Styles */
+#home-h1 {
+  position: absolute;
+
+  top: 30%;
+  left: 0;
+
+  text-align: left;
 }
+#home-text {
+  margin-top: auto;
+}
+/*#endregion*/
+
+/*#region Links Bar */
+#content-wrapper .links-bar {
+  display: block;
+  position: fixed;
+  right: 0;
+
+  width: var(--links-width);
+
+  padding: 1rem 0.5rem;
+}
+/*#endregion*/
+
+/*#region Main Content */
+#content-wrapper {
+  display: block;
+
+  margin-left: var(--nav-width);
+
+  padding: 1.5rem 1.5rem;
+
+  width: 100%;
+  min-height: max(100%, 100vh);
+}
+
+#content-wrapper .content-body {
+  isolation: isolate;
+  position: relative;
+
+  width: 100%;
+  height: 100%;
+
+  text-align: center;
+}
+/*#endregion*/
 
 .noise-holder {
   display: block;

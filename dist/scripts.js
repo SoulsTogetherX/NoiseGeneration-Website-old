@@ -1,14 +1,52 @@
 var _a, _b, _c;
 //#region Helper Methods
 const clamp = (num, min, max) => Math.min(Math.max(num, min), max);
+//#endregion
+//#region Random Number Generators
+function xmur3(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+        h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+        h = (h << 13) | (h >>> 19);
+    }
+    return () => {
+        h = Math.imul(h ^ (h >>> 16), 2246822507);
+        h = Math.imul(h ^ (h >>> 13), 3266489909);
+        return (h ^= h >>> 16) >>> 0;
+    };
+}
+function mulberry32(a) {
+    return () => {
+        let t = (a += 0x6d2b79f5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return (t ^ (t >>> 14)) >>> 0;
+    };
+}
+function sfc32(a, b, c, d) {
+    a >>>= 0;
+    b >>>= 0;
+    c >>>= 0;
+    d >>>= 0;
+    return () => {
+        const t = (((a + b) | 0) + d) | 0;
+        d = (d + 1) | 0;
+        a = (b ^ (b >>> 9)) | 0;
+        b = (c + (c << 3)) | 0;
+        c = (c << 21) | (c >>> 11);
+        c = (c + t) | 0;
+        return t >>> 0;
+    };
+}
 class InputContainer {
-    constructor(inputElement, onUpdate) {
+    constructor(inputElement, event, onUpdate) {
         this.inputElement = inputElement;
         this.onUpdateMethod = onUpdate;
-        this.inputElement.addEventListener("input", this.onUpdateMethod);
+        this.event = event;
+        this.inputElement.addEventListener(event, this.onUpdateMethod);
     }
     disconnectUpdateMethod() {
-        this.inputElement.removeEventListener("input", this.onUpdateMethod);
+        this.inputElement.removeEventListener(this.event, this.onUpdateMethod);
     }
     getValue() {
         return this.inputElement.value;
@@ -22,14 +60,14 @@ class NoiseCanvas extends HTMLElement {
     constructor() {
         super();
         this.writeIdx = 0;
-        this.allowCanvasDisplay = true;
         this.frame = 0;
-        this.valueInputs = {};
+        this.internalProgressCutoff = 0;
+        this.valuesRecord = {};
         //#endregion
         //#region Attribute Update Methods
-        this.valueUpdaterMethod = this.scheduleBufferRefresh.bind(this);
         this.resolutionUpdaterMethod = this.resizeCanvas.bind(this);
-        this.progressUpdaterMethod = this.forceDraw.bind(this);
+        this.bufferUpdaterMethod = this.scheduleBufferRefresh.bind(this);
+        this.progressUpdaterMethod = this.updateProgressCutoff.bind(this);
         const shadow = this.attachShadow({ mode: "closed" });
         shadow.innerHTML = `
       <style>
@@ -44,7 +82,8 @@ class NoiseCanvas extends HTMLElement {
       </style>
       <canvas></canvas>
     `;
-        this.updateAllowCanvasDisplay();
+        this.initializeValues();
+        this.randMethod = sfc32(0, 0, 0, 0);
         this.canvas = shadow.querySelector("canvas");
         const ctx = this.canvas.getContext("2d");
         if (!ctx)
@@ -55,7 +94,7 @@ class NoiseCanvas extends HTMLElement {
     }
     //#endregion
     //#region Virtual Methods
-    //    Dom Enter/Exit
+    //#region     Dom Enter/Exit
     connectedCallback() {
         this.connectAll();
         this.resizeCanvas();
@@ -65,57 +104,55 @@ class NoiseCanvas extends HTMLElement {
         cancelAnimationFrame(this.frame);
         this.disconnectAll();
     }
-    //    Attribute Changes
+    //#endregion
+    //#region     Attribute Changes
     static get observedAttributes() {
         return [
             "inputsRoot",
-            "resolution",
-            "resolutionX",
-            "resolutionY",
-            "progress",
-            "draw",
             "useProgress",
+            ...NoiseCanvas.SEED_NAMES,
+            ...NoiseCanvas.RESOLUTION_NAMES,
+            ...NoiseCanvas.PROGRESS_NAMES,
         ];
     }
     attributeChangedCallback(name, oldValue, newValue) {
         if (oldValue !== newValue) {
-            if (name === "resolution" ||
-                name === "resolutionX" ||
-                name === "resolutionY") {
+            if (NoiseCanvas.RESOLUTION_NAMES.includes(name)) {
                 this.connectResolution(undefined, newValue);
                 this.resizeCanvas();
             }
-            else if (name === "draw") {
-                this.updateAllowCanvasDisplay();
-                this.forceDraw();
+            else if (NoiseCanvas.PROGRESS_NAMES.includes(name)) {
+                this.connectProgress(undefined, newValue);
+                this.updateProgressCutoff();
+            }
+            else if (NoiseCanvas.SEED_NAMES.includes(name)) {
+                //
+            }
+            else if (this.getParameterNames().includes(name)) {
+                this.connectParameters(undefined, newValue);
+                this.scheduleBufferRefresh();
             }
             else if (name === "useProgress") {
-                this.progressMemory = this.createProgressMemory(this.buffer.width * this.buffer.height);
+                this.createProgressMemory(this.getPixelCount());
                 this.forceDraw();
-            }
-            else if (name === "progress") {
-                this.connectProgress(undefined, newValue);
-                this.forceDraw();
-            }
-            else if (this.getValueNames().includes(name)) {
-                this.connectValues(undefined, newValue);
-                this.scheduleBufferRefresh();
             }
         }
     }
+    //#endregion
     //#endregion
     //#region Resolution
     resizeCanvas() {
         var _d, _e, _f, _g;
         const canvas = this.canvas;
-        const [resolution, resolutionX, resolutionY] = NoiseCanvas.resolutionNames;
+        const [resolution, resolutionX, resolutionY] = NoiseCanvas.RESOLUTION_NAMES;
         const baseResolution = this.getValue(resolution);
         const canvasX = Number((_e = (_d = this.getValue(resolutionX)) !== null && _d !== void 0 ? _d : baseResolution) !== null && _e !== void 0 ? _e : NoiseCanvas.DEFAULT_RESOLUTION);
         const canvasY = Number((_g = (_f = this.getValue(resolutionY)) !== null && _f !== void 0 ? _f : baseResolution) !== null && _g !== void 0 ? _g : NoiseCanvas.DEFAULT_RESOLUTION);
         canvas.width = canvasX;
         canvas.height = canvasY;
         this.buffer = new ImageData(canvasX, canvasY);
-        this.progressMemory = this.createProgressMemory(canvasX * canvasY);
+        this.createProgressMemory(canvasX * canvasY);
+        this.updateProgressCutoff();
         this.scheduleBufferRefresh();
     }
     //#endregion
@@ -127,33 +164,30 @@ class NoiseCanvas extends HTMLElement {
     }
     refreshBuffer() {
         this.writeIdx = 0;
+        this.settupSeed();
         this.setBuffer(this.buffer);
         this.forceDraw();
     }
     //    Draw
     forceDraw() {
-        if (this.drawCheck(this.buffer, this.getProgress())) {
-            this.drawBuffer(this.buffer, this.getProgress());
+        const cutoff = this.internalProgressCutoff;
+        if (this.drawCheck(this.buffer, cutoff)) {
+            this.drawBuffer(this.buffer, cutoff);
         }
     }
-    drawCheck(buffer, progress) {
-        if (!this.allowCanvasDisplay) {
-            this.ctx.clearRect(0, 0, buffer.width, buffer.height);
-            return false;
-        }
-        if (this.progressMemory === undefined || progress >= 1.0) {
+    drawCheck(buffer, cutoff) {
+        if (this.progressMemory === undefined || cutoff >= this.getPixelCount()) {
             this.ctx.putImageData(buffer, 0, 0);
             return false;
         }
-        if (progress <= 0.0) {
+        if (cutoff <= 0) {
             this.ctx.clearRect(0, 0, buffer.width, buffer.height);
             return false;
         }
         return true;
     }
-    drawBuffer(buffer, progress) {
+    drawBuffer(buffer, cutoff) {
         const memory = this.progressMemory;
-        const cutoff = Math.floor(memory.length * progress);
         const copyArr = new Uint8ClampedArray(memory.length << 2);
         const dataArr = buffer.data;
         let i = 0;
@@ -166,55 +200,185 @@ class NoiseCanvas extends HTMLElement {
         this.ctx.putImageData(new ImageData(copyArr, buffer.width, buffer.height), 0, 0);
     }
     //#endregion
+    //#region Attributes Settup
+    //#region     Base Value Accessing
+    //#region         Initialize
+    initializeValues() {
+        this.clearValues();
+        [
+            ...NoiseCanvas.RESOLUTION_NAMES,
+            ...NoiseCanvas.PROGRESS_NAMES,
+            ...this.getParameterNames(),
+        ].map((name) => {
+            this.valuesRecord[name] = this.getAttribute(name);
+        });
+    }
+    clearValues() {
+        this.disconnectAll();
+        this.valuesRecord = {};
+    }
+    //#endregion
+    //#region         Accessors
+    //#region             Generic
+    getValueFromType(val) {
+        if (val instanceof InputContainer) {
+            return val.getValue();
+        }
+        return val;
+    }
+    isValueConnected(name) {
+        return this.valuesRecord[name] instanceof InputContainer;
+    }
+    getValue(name) {
+        return this.getValueFromType(this.valuesRecord[name]);
+    }
+    //#endregion
+    //#region             Specific
+    getResolution() {
+        var _d;
+        return Number((_d = this.getValue(NoiseCanvas.RESOLUTION_NAMES[0])) !== null && _d !== void 0 ? _d : 50);
+    }
+    getResolutionX() {
+        var _d;
+        return Number((_d = this.getValue(NoiseCanvas.RESOLUTION_NAMES[1])) !== null && _d !== void 0 ? _d : 50);
+    }
+    getResolutionY() {
+        var _d;
+        return Number((_d = this.getValue(NoiseCanvas.RESOLUTION_NAMES[2])) !== null && _d !== void 0 ? _d : 50);
+    }
+    getProgressCutoff() {
+        var _d;
+        return Number((_d = this.getValue(NoiseCanvas.PROGRESS_NAMES[0])) !== null && _d !== void 0 ? _d : this.getPixelCount());
+    }
+    getProgressRatio() {
+        var _d;
+        return Number((_d = this.getValue(NoiseCanvas.PROGRESS_NAMES[1])) !== null && _d !== void 0 ? _d : 1.0);
+    }
+    getSeed() {
+        var _d;
+        return ((_d = this.valuesRecord[NoiseCanvas.SEED_NAMES[0]]) !== null && _d !== void 0 ? _d : (Math.random() * 0xffffffff) | 0);
+    }
+    getPixelCount() {
+        var _d, _e;
+        return (_e = (_d = this.progressMemory) === null || _d === void 0 ? void 0 : _d.length) !== null && _e !== void 0 ? _e : 0;
+    }
+    //#endregion
+    //#endregion
+    //#region         Direct Setters
+    setResolution(val) {
+        const name = NoiseCanvas.RESOLUTION_NAMES[0];
+        if (this.isValueConnected(name)) {
+            return;
+        }
+        this.valuesRecord[name] = val;
+        this.resolutionUpdaterMethod();
+    }
+    setResolutionX(val) {
+        const name = NoiseCanvas.RESOLUTION_NAMES[1];
+        if (this.isValueConnected(name)) {
+            return;
+        }
+        this.valuesRecord[name] = val;
+        this.resolutionUpdaterMethod();
+    }
+    setResolutionY(val) {
+        const name = NoiseCanvas.RESOLUTION_NAMES[2];
+        if (this.isValueConnected(name)) {
+            return;
+        }
+        this.valuesRecord[name] = val;
+        this.resolutionUpdaterMethod();
+    }
+    setProgressCutoff(val) {
+        const name = NoiseCanvas.PROGRESS_NAMES[0];
+        if (this.isValueConnected(name)) {
+            return;
+        }
+        this.valuesRecord[name] = val;
+        this.progressUpdaterMethod();
+    }
+    setProgressRatio(val) {
+        const name = NoiseCanvas.PROGRESS_NAMES[1];
+        if (this.isValueConnected(name)) {
+            return;
+        }
+        this.valuesRecord[name] = val;
+        this.progressUpdaterMethod();
+    }
+    setSeed(val) {
+        const name = NoiseCanvas.SEED_NAMES[1];
+        if (this.isValueConnected(name)) {
+            return;
+        }
+        this.valuesRecord[name] = val;
+        this.bufferUpdaterMethod();
+    }
+    //#endregion
+    //#region         Helper Setters
+    setParameter(name, val) {
+        if (!this.getParameterNames().includes(name)) {
+            throw TypeError(`Parameter ${name} does not exist on current Noise Canvas.`);
+        }
+        if (this.isValueConnected(name)) {
+            return;
+        }
+        this.valuesRecord[name] = val;
+    }
+    //#endregion
+    //#region
     //#region Attribute Event Settup
     //#region     Connection
     //                Base Connection
-    connectName(name, onUpdate, fallback) {
-        if (name in this.valueInputs) {
+    connectName(name, event, onUpdate, fallback) {
+        if (name in this.valuesRecord) {
             this.disconnectName(name);
         }
         const attribute = this.getAttribute(name);
         if (attribute !== null) {
             if (!isNaN(Number(attribute)) && attribute.trim() !== "") {
-                this.valueInputs[name] = attribute;
+                this.valuesRecord[name] = attribute;
                 return;
             }
             const sliderId = document.getElementById(attribute);
             if (sliderId !== null) {
-                this.valueInputs[name] = new InputContainer(sliderId, onUpdate);
+                this.valuesRecord[name] = new InputContainer(sliderId, event, onUpdate);
                 return;
             }
         }
         const slider = fallback.find((val) => val.name === name);
         if (slider !== undefined) {
-            this.valueInputs[name] = new InputContainer(slider, onUpdate);
+            this.valuesRecord[name] = new InputContainer(slider, event, onUpdate);
             return;
         }
     }
-    connectTemplate(selectors = undefined, names, onUpdate) {
+    connectTemplate(selectors = undefined, names, event, onUpdate) {
         if (selectors === undefined) {
             selectors = this.getSelectors();
         }
         if (typeof names === "string") {
-            this.connectName(names, onUpdate, selectors);
+            this.connectName(names, event, onUpdate, selectors);
             return;
         }
-        names.map((val) => this.connectName(val, onUpdate, selectors));
+        names.map((val) => this.connectName(val, event, onUpdate, selectors));
     }
     //                Types of Connections
-    connectValues(selectors = undefined, name = undefined) {
-        this.connectTemplate(selectors, name !== null && name !== void 0 ? name : this.getValueNames(), this.valueUpdaterMethod.bind(this));
+    connectParameters(selectors = undefined, name = undefined) {
+        this.connectTemplate(selectors, name !== null && name !== void 0 ? name : this.getParameterNames(), "input", this.bufferUpdaterMethod.bind(this));
     }
     connectResolution(selectors = undefined, name = undefined) {
-        this.connectTemplate(selectors, name !== null && name !== void 0 ? name : NoiseCanvas.resolutionNames, this.resolutionUpdaterMethod.bind(this));
+        this.connectTemplate(selectors, name !== null && name !== void 0 ? name : NoiseCanvas.RESOLUTION_NAMES, "input", this.resolutionUpdaterMethod.bind(this));
     }
     connectProgress(selectors = undefined, name = undefined) {
-        this.connectTemplate(selectors, name !== null && name !== void 0 ? name : NoiseCanvas.progressNames, this.progressUpdaterMethod.bind(this));
+        this.connectTemplate(selectors, name !== null && name !== void 0 ? name : NoiseCanvas.PROGRESS_NAMES, "input", this.progressUpdaterMethod.bind(this));
+    }
+    connectSeed(selectors = undefined, name = undefined) {
+        this.connectTemplate(selectors, name !== null && name !== void 0 ? name : NoiseCanvas.SEED_NAMES, "change", this.bufferUpdaterMethod.bind(this));
     }
     //                All Connections
     connectAll() {
         const selectors = this.getSelectors();
-        this.connectValues(selectors);
+        this.connectSeed(selectors);
+        this.connectParameters(selectors);
         this.connectResolution(selectors);
         this.connectProgress(selectors);
     }
@@ -222,25 +386,19 @@ class NoiseCanvas extends HTMLElement {
     //#region     Disconnect
     //                Base Disconnect
     disconnectName(name) {
-        const slider = this.valueInputs[name];
+        const slider = this.valuesRecord[name];
         if (slider instanceof InputContainer) {
             slider.disconnectUpdateMethod();
         }
-        delete this.valueInputs[name];
+        this.valuesRecord[name] = undefined;
     }
     //                All Disconnect
     disconnectAll() {
-        Object.values(this.valueInputs).forEach((slider) => {
+        Object.values(this.valuesRecord).forEach((slider) => {
             if (slider instanceof InputContainer) {
                 slider.disconnectUpdateMethod();
             }
         });
-        this.valueInputs = {};
-    }
-    //#endregion
-    //#region     Direct Attribute Updaters
-    updateAllowCanvasDisplay() {
-        this.allowCanvasDisplay = !(this.getAttribute("draw") === "false");
     }
     //#endregion
     //#endregion
@@ -257,35 +415,41 @@ class NoiseCanvas extends HTMLElement {
         return Array.from(this.getInputsRoot().querySelectorAll("input[name]"));
     }
     //#endregion
-    //#region     Base Value Accessing
-    getValueFromType(val) {
-        if (val === undefined) {
-            return undefined;
-        }
-        if (typeof val === "string") {
-            return val;
-        }
-        return val.getValue();
-    }
-    getValue(name) {
-        return this.getValueFromType(this.valueInputs[name]);
-    }
-    //#endregion
     //#region     Progress
-    getProgress() {
-        var _d;
-        return Number((_d = this.getValue(NoiseCanvas.progressNames[0])) !== null && _d !== void 0 ? _d : NoiseCanvas.DEFAULT_PROGRESS);
+    updateProgressCutoff() {
+        const pixelCutoff = this.getValue(NoiseCanvas.PROGRESS_NAMES[0]);
+        if (pixelCutoff !== undefined) {
+            this.internalProgressCutoff = Number(pixelCutoff);
+        }
+        else {
+            const pixelCount = this.getPixelCount();
+            const pixelRatio = this.getValue(NoiseCanvas.PROGRESS_NAMES[1]);
+            if (pixelRatio !== undefined) {
+                this.internalProgressCutoff = Number(pixelRatio) * pixelCount;
+            }
+            else {
+                this.internalProgressCutoff = pixelCount;
+            }
+        }
+        this.forceDraw();
     }
     createProgressMemory(countmaxIndex) {
         if (this.getAttribute("useProgress") !== "true") {
-            return undefined;
+            this.progressMemory = undefined;
+            return;
         }
-        if (countmaxIndex <= 0xff)
-            return new Uint8Array(countmaxIndex);
-        if (countmaxIndex <= 0xffff)
-            return new Uint16Array(countmaxIndex);
-        if (countmaxIndex <= 0xffffffff)
-            return new Uint32Array(countmaxIndex);
+        if (countmaxIndex <= 0xff) {
+            this.progressMemory = new Uint8Array(countmaxIndex);
+            return;
+        }
+        if (countmaxIndex <= 0xffff) {
+            this.progressMemory = new Uint16Array(countmaxIndex);
+            return;
+        }
+        if (countmaxIndex <= 0xffffffff) {
+            this.progressMemory = new Uint32Array(countmaxIndex);
+            return;
+        }
         throw new Error("Cannot save the progress of a canvas with more than 0xffffffff pixels.");
     }
     //#endregion
@@ -349,28 +513,44 @@ class NoiseCanvas extends HTMLElement {
         newBuffer[idx + 3] = 0;
     }
     //#endregion
-    //#region     Simple Random Method
+    //#region     Random Methods
+    settupSeed() {
+        const hash = mulberry32(this.getSeed());
+        this.randMethod = sfc32(hash(), hash(), hash(), hash());
+    }
+    random32bit() {
+        return this.randMethod();
+    }
+    random16bit() {
+        return this.randMethod() & 0xffff;
+    }
     random8bit() {
-        return (Math.random() * 256) | 0;
+        return this.randMethod() & 0xff;
+    }
+    // [0, 1)
+    randomUFloat() {
+        return (this.randMethod() >>> 0) / 0x100000000;
+    }
+    // [-1, 1)
+    randomFloat() {
+        return (this.randMethod() | 0) / 0x80000000;
     }
 }
 //#region Constants
 NoiseCanvas.DEFAULT_RESOLUTION = "50";
-NoiseCanvas.DEFAULT_PROGRESS = 1.0;
-//#endregion
-//#region Connection Attribute Names
-NoiseCanvas.resolutionNames = [
+NoiseCanvas.RESOLUTION_NAMES = [
     "resolution",
     "resolutionX",
     "resolutionY",
 ];
-NoiseCanvas.progressNames = ["progress"];
+NoiseCanvas.PROGRESS_NAMES = ["progressCutoff", "progressRatio"];
+NoiseCanvas.SEED_NAMES = ["seed"];
 //#endregion
 //#region White Noise
 customElements.define("white-noise", (_a = class WhiteNoiseCanvas extends NoiseCanvas {
         //#endregion
         //#region Attribute Methods
-        getValueNames() {
+        getParameterNames() {
             return _a.customAttributes;
         }
         static get observedAttributes() {
@@ -398,7 +578,7 @@ customElements.define("white-noise", (_a = class WhiteNoiseCanvas extends NoiseC
 customElements.define("gaussian-noise", (_b = class GaussianNoise extends NoiseCanvas {
         //#endregion
         //#region Attribute Methods
-        getValueNames() {
+        getParameterNames() {
             return _b.customAttributes;
         }
         static get observedAttributes() {
@@ -425,9 +605,9 @@ customElements.define("gaussian-noise", (_b = class GaussianNoise extends NoiseC
             let u = 0;
             let v = 0;
             while (u === 0)
-                u = Math.random();
+                u = this.randomUFloat();
             while (v === 0)
-                v = Math.random();
+                v = this.randomUFloat();
             // Standard Normal Distribution (mean 0, stdev 1)
             return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
         }
@@ -438,7 +618,7 @@ customElements.define("gaussian-noise", (_b = class GaussianNoise extends NoiseC
 customElements.define("random-walk-noise", (_c = class RandomWalkNoise extends NoiseCanvas {
         //#endregion
         //#region Attribute Methods
-        getValueNames() {
+        getParameterNames() {
             return _c.customAttributes;
         }
         static get observedAttributes() {
@@ -464,7 +644,7 @@ customElements.define("random-walk-noise", (_c = class RandomWalkNoise extends N
                     ? this.random8bit() - balancePoint
                     : pInfo[0] / pInfo[1]) *
                     pull +
-                    (Math.random() * 2 - 1) * intensityScale, -balancePoint, 255 - balancePoint);
+                    Math.sign(this.randomFloat()) * intensityScale, -balancePoint, 255 - balancePoint);
                 memo[idx] = value;
                 this.setPixel(idx, (value + balancePoint) | 0);
             };

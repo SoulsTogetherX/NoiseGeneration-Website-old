@@ -3,27 +3,75 @@ const clamp = (num: number, min: number, max: number) =>
   Math.min(Math.max(num, min), max)
 //#endregion
 
+//#region Random Number Generators
+function xmur3(str: string): () => number {
+  let h = 1779033703 ^ str.length
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353)
+    h = (h << 13) | (h >>> 19)
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507)
+    h = Math.imul(h ^ (h >>> 13), 3266489909)
+    return (h ^= h >>> 16) >>> 0
+  }
+}
+
+function mulberry32(a: number): () => number {
+  return (): number => {
+    let t = (a += 0x6d2b79f5)
+
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return (t ^ (t >>> 14)) >>> 0
+  }
+}
+
+function sfc32(a: number, b: number, c: number, d: number): () => number {
+  a >>>= 0
+  b >>>= 0
+  c >>>= 0
+  d >>>= 0
+
+  return (): number => {
+    const t = (((a + b) | 0) + d) | 0
+    d = (d + 1) | 0
+    a = (b ^ (b >>> 9)) | 0
+    b = (c + (c << 3)) | 0
+    c = (c << 21) | (c >>> 11)
+    c = (c + t) | 0
+    return t >>> 0
+  }
+}
+//#endregion
+
 //#region Noise Canvases
 
 //#region Abstract
 
 //#region     Needed Types
-type NoiseInputType = InputContainer | string | undefined
+type NoiseInputType = InputContainer | any | undefined
 class InputContainer {
   private readonly inputElement: HTMLInputElement
   private readonly onUpdateMethod: () => void
+  private readonly event: string
 
-  constructor(inputElement: HTMLInputElement, onUpdate: () => void) {
+  constructor(
+    inputElement: HTMLInputElement,
+    event: string,
+    onUpdate: () => void,
+  ) {
     this.inputElement = inputElement
     this.onUpdateMethod = onUpdate
+    this.event = event
 
-    this.inputElement.addEventListener("input", this.onUpdateMethod)
+    this.inputElement.addEventListener(event, this.onUpdateMethod)
   }
 
   public disconnectUpdateMethod(): void {
-    this.inputElement.removeEventListener("input", this.onUpdateMethod)
+    this.inputElement.removeEventListener(this.event, this.onUpdateMethod)
   }
-  public getValue(): string {
+  public getValue(): any {
     return this.inputElement.value
   }
 }
@@ -33,10 +81,17 @@ class InputContainer {
 abstract class NoiseCanvas extends HTMLElement {
   //#region Constants
   private static readonly DEFAULT_RESOLUTION = "50"
-  private static readonly DEFAULT_PROGRESS = 1.0
+
+  private static readonly RESOLUTION_NAMES = [
+    "resolution",
+    "resolutionX",
+    "resolutionY",
+  ]
+  private static readonly PROGRESS_NAMES = ["progressCutoff", "progressRatio"]
+  private static readonly SEED_NAMES = ["seed"]
   //#endregion
 
-  //#region Private Accessors
+  //#region Private Variables
   private readonly canvas: HTMLCanvasElement
   private readonly ctx: CanvasRenderingContext2D
 
@@ -44,27 +99,21 @@ abstract class NoiseCanvas extends HTMLElement {
   private progressMemory: Uint8Array | Uint16Array | Uint32Array | undefined
   private writeIdx: number = 0
 
-  private allowCanvasDisplay: boolean = true
-
   private frame: number = 0
-  //#endregion
 
-  //#region Connection Attribute Names
-  private static readonly resolutionNames = [
-    "resolution",
-    "resolutionX",
-    "resolutionY",
-  ]
-  private static readonly progressNames = ["progress"]
-  private valueInputs: Record<string, NoiseInputType> = {}
+  private internalProgressCutoff: number = 0
+
+  private valuesRecord: Record<string, NoiseInputType> = {}
+  private randMethod: () => number
   //#endregion
 
   //#region Attribute Update Methods
-  private readonly valueUpdaterMethod: () => void =
-    this.scheduleBufferRefresh.bind(this)
   private readonly resolutionUpdaterMethod: () => void =
     this.resizeCanvas.bind(this)
-  private readonly progressUpdaterMethod: () => void = this.forceDraw.bind(this)
+  private readonly bufferUpdaterMethod: () => void =
+    this.scheduleBufferRefresh.bind(this)
+  private readonly progressUpdaterMethod: () => void =
+    this.updateProgressCutoff.bind(this)
   //#endregion
 
   //#region Constructor
@@ -86,7 +135,8 @@ abstract class NoiseCanvas extends HTMLElement {
       <canvas></canvas>
     `
 
-    this.updateAllowCanvasDisplay()
+    this.initializeValues()
+    this.randMethod = sfc32(0, 0, 0, 0)
 
     this.canvas = shadow.querySelector("canvas")!
     const ctx = this.canvas.getContext("2d")
@@ -101,12 +151,12 @@ abstract class NoiseCanvas extends HTMLElement {
   //#region Abstract Methods
   //    Used to draw the desired buffer, which will be kept until a refresh or a redraw is requested
   protected abstract setBuffer(buffer: ImageData): void
-  //    Used to return what values this NoiseType needs to function
-  protected abstract getValueNames(): Array<string>
+  //    Used to return what parameters this NoiseType needs to function
+  protected abstract getParameterNames(): Array<string>
   //#endregion
 
   //#region Virtual Methods
-  //    Dom Enter/Exit
+  //#region     Dom Enter/Exit
   connectedCallback(): void {
     this.connectAll()
     this.resizeCanvas()
@@ -117,56 +167,45 @@ abstract class NoiseCanvas extends HTMLElement {
 
     this.disconnectAll()
   }
+  //#endregion
 
-  //    Attribute Changes
+  //#region     Attribute Changes
   static get observedAttributes() {
     return [
       "inputsRoot",
-      "resolution",
-      "resolutionX",
-      "resolutionY",
-      "progress",
-      "draw",
       "useProgress",
+      ...NoiseCanvas.SEED_NAMES,
+      ...NoiseCanvas.RESOLUTION_NAMES,
+      ...NoiseCanvas.PROGRESS_NAMES,
     ]
   }
 
-  attributeChangedCallback(
-    name: string,
-    oldValue: string,
-    newValue: string,
-  ): void {
+  attributeChangedCallback(name: string, oldValue: any, newValue: any): void {
     if (oldValue !== newValue) {
-      if (
-        name === "resolution" ||
-        name === "resolutionX" ||
-        name === "resolutionY"
-      ) {
+      if (NoiseCanvas.RESOLUTION_NAMES.includes(name)) {
         this.connectResolution(undefined, newValue)
         this.resizeCanvas()
-      } else if (name === "draw") {
-        this.updateAllowCanvasDisplay()
-        this.forceDraw()
-      } else if (name === "useProgress") {
-        this.progressMemory = this.createProgressMemory(
-          this.buffer.width * this.buffer.height,
-        )
-        this.forceDraw()
-      } else if (name === "progress") {
+      } else if (NoiseCanvas.PROGRESS_NAMES.includes(name)) {
         this.connectProgress(undefined, newValue)
-        this.forceDraw()
-      } else if (this.getValueNames().includes(name)) {
-        this.connectValues(undefined, newValue)
+        this.updateProgressCutoff()
+      } else if (NoiseCanvas.SEED_NAMES.includes(name)) {
+        //
+      } else if (this.getParameterNames().includes(name)) {
+        this.connectParameters(undefined, newValue)
         this.scheduleBufferRefresh()
+      } else if (name === "useProgress") {
+        this.createProgressMemory(this.getPixelCount())
+        this.forceDraw()
       }
     }
   }
+  //#endregion
   //#endregion
 
   //#region Resolution
   private resizeCanvas(): void {
     const canvas = this.canvas
-    const [resolution, resolutionX, resolutionY] = NoiseCanvas.resolutionNames
+    const [resolution, resolutionX, resolutionY] = NoiseCanvas.RESOLUTION_NAMES
 
     const baseResolution = this.getValue(resolution)
     const canvasX = Number(
@@ -183,8 +222,9 @@ abstract class NoiseCanvas extends HTMLElement {
     canvas.width = canvasX
     canvas.height = canvasY
     this.buffer = new ImageData(canvasX, canvasY)
-    this.progressMemory = this.createProgressMemory(canvasX * canvasY)
 
+    this.createProgressMemory(canvasX * canvasY)
+    this.updateProgressCutoff()
     this.scheduleBufferRefresh()
   }
   //#endregion
@@ -198,34 +238,33 @@ abstract class NoiseCanvas extends HTMLElement {
   private refreshBuffer(): void {
     this.writeIdx = 0
 
+    this.settupSeed()
     this.setBuffer(this.buffer)
     this.forceDraw()
   }
 
   //    Draw
   private forceDraw(): void {
-    if (this.drawCheck(this.buffer, this.getProgress())) {
-      this.drawBuffer(this.buffer, this.getProgress())
+    const cutoff = this.internalProgressCutoff
+
+    if (this.drawCheck(this.buffer, cutoff)) {
+      this.drawBuffer(this.buffer, cutoff)
     }
   }
-  private drawCheck(buffer: ImageData, progress: number): boolean {
-    if (!this.allowCanvasDisplay) {
-      this.ctx.clearRect(0, 0, buffer.width, buffer.height)
-      return false
-    }
-    if (this.progressMemory === undefined || progress >= 1.0) {
+  private drawCheck(buffer: ImageData, cutoff: number): boolean {
+    if (this.progressMemory === undefined || cutoff >= this.getPixelCount()) {
       this.ctx.putImageData(buffer, 0, 0)
       return false
     }
-    if (progress <= 0.0) {
+    if (cutoff <= 0) {
       this.ctx.clearRect(0, 0, buffer.width, buffer.height)
       return false
     }
     return true
   }
-  private drawBuffer(buffer: ImageData, progress: number): void {
+
+  private drawBuffer(buffer: ImageData, cutoff: number): void {
     const memory = this.progressMemory!
-    const cutoff: number = Math.floor(memory.length * progress)
     const copyArr = new Uint8ClampedArray(memory.length << 2)
     const dataArr = buffer.data
 
@@ -245,29 +284,176 @@ abstract class NoiseCanvas extends HTMLElement {
   }
   //#endregion
 
+  //#region Attributes Settup
+
+  //#region     Base Value Accessing
+  //#region         Initialize
+  private initializeValues(): void {
+    this.clearValues()
+    ;[
+      ...NoiseCanvas.RESOLUTION_NAMES,
+      ...NoiseCanvas.PROGRESS_NAMES,
+      ...this.getParameterNames(),
+    ].map((name: string) => {
+      this.valuesRecord[name] = this.getAttribute(name)
+    })
+  }
+  private clearValues(): void {
+    this.disconnectAll()
+    this.valuesRecord = {}
+  }
+  //#endregion
+
+  //#region         Accessors
+  //#region             Generic
+  private getValueFromType(val: NoiseInputType): any | undefined {
+    if (val instanceof InputContainer) {
+      return val.getValue()
+    }
+    return val
+  }
+
+  public isValueConnected(name: string): boolean {
+    return this.valuesRecord[name] instanceof InputContainer
+  }
+  public getValue(name: string): any {
+    return this.getValueFromType(this.valuesRecord[name])
+  }
+  //#endregion
+
+  //#region             Specific
+  public getResolution(): number {
+    return Number(this.getValue(NoiseCanvas.RESOLUTION_NAMES[0]) ?? 50)
+  }
+  public getResolutionX(): number {
+    return Number(this.getValue(NoiseCanvas.RESOLUTION_NAMES[1]) ?? 50)
+  }
+  public getResolutionY(): number {
+    return Number(this.getValue(NoiseCanvas.RESOLUTION_NAMES[2]) ?? 50)
+  }
+
+  public getProgressCutoff(): number {
+    return Number(
+      this.getValue(NoiseCanvas.PROGRESS_NAMES[0]) ?? this.getPixelCount(),
+    )
+  }
+  public getProgressRatio(): number {
+    return Number(this.getValue(NoiseCanvas.PROGRESS_NAMES[1]) ?? 1.0)
+  }
+
+  public getSeed(): number {
+    return (
+      this.valuesRecord[NoiseCanvas.SEED_NAMES[0]] ??
+      (Math.random() * 0xffffffff) | 0
+    )
+  }
+
+  public getPixelCount(): number {
+    return this.progressMemory?.length ?? 0
+  }
+  //#endregion
+  //#endregion
+
+  //#region         Direct Setters
+  public setResolution(val: any): void {
+    const name = NoiseCanvas.RESOLUTION_NAMES[0]
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.valuesRecord[name] = val
+    this.resolutionUpdaterMethod()
+  }
+  public setResolutionX(val: any): void {
+    const name = NoiseCanvas.RESOLUTION_NAMES[1]
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.valuesRecord[name] = val
+    this.resolutionUpdaterMethod()
+  }
+  public setResolutionY(val: any): void {
+    const name = NoiseCanvas.RESOLUTION_NAMES[2]
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.valuesRecord[name] = val
+    this.resolutionUpdaterMethod()
+  }
+
+  public setProgressCutoff(val: any): void {
+    const name = NoiseCanvas.PROGRESS_NAMES[0]
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.valuesRecord[name] = val
+    this.progressUpdaterMethod()
+  }
+  public setProgressRatio(val: any): void {
+    const name = NoiseCanvas.PROGRESS_NAMES[1]
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.valuesRecord[name] = val
+    this.progressUpdaterMethod()
+  }
+
+  public setSeed(val: number): void {
+    const name = NoiseCanvas.SEED_NAMES[1]
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.valuesRecord[name] = val
+    this.bufferUpdaterMethod()
+  }
+  //#endregion
+
+  //#region         Helper Setters
+  public setParameter(name: string, val: any): void {
+    if (!this.getParameterNames().includes(name)) {
+      throw TypeError(
+        `Parameter ${name} does not exist on current Noise Canvas.`,
+      )
+    }
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.valuesRecord[name] = val
+  }
+  //#endregion
+  //#region
+
   //#region Attribute Event Settup
   //#region     Connection
   //                Base Connection
   private connectName(
     name: string,
+    event: string,
     onUpdate: () => void,
     fallback: Array<HTMLInputElement>,
   ): void {
-    if (name in this.valueInputs) {
+    if (name in this.valuesRecord) {
       this.disconnectName(name)
     }
 
     const attribute = this.getAttribute(name)
     if (attribute !== null) {
       if (!isNaN(Number(attribute)) && attribute.trim() !== "") {
-        this.valueInputs[name] = attribute
+        this.valuesRecord[name] = attribute
         return
       }
 
       const sliderId = document.getElementById(attribute)
       if (sliderId !== null) {
-        this.valueInputs[name] = new InputContainer(
+        this.valuesRecord[name] = new InputContainer(
           sliderId as HTMLInputElement,
+          event,
           onUpdate,
         )
         return
@@ -278,13 +464,14 @@ abstract class NoiseCanvas extends HTMLElement {
       (val: HTMLInputElement) => val.name === name,
     )
     if (slider !== undefined) {
-      this.valueInputs[name] = new InputContainer(slider, onUpdate)
+      this.valuesRecord[name] = new InputContainer(slider, event, onUpdate)
       return
     }
   }
   private connectTemplate(
     selectors: Array<HTMLInputElement> | undefined = undefined,
     names: string | Array<string>,
+    event: string,
     onUpdate: () => void,
   ): void {
     if (selectors === undefined) {
@@ -292,21 +479,22 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     if (typeof names === "string") {
-      this.connectName(names, onUpdate, selectors)
+      this.connectName(names, event, onUpdate, selectors)
       return
     }
-    names.map((val) => this.connectName(val, onUpdate, selectors))
+    names.map((val) => this.connectName(val, event, onUpdate, selectors))
   }
 
   //                Types of Connections
-  private connectValues(
+  private connectParameters(
     selectors: Array<HTMLInputElement> | undefined = undefined,
     name: string | undefined = undefined,
   ): void {
     this.connectTemplate(
       selectors,
-      name ?? this.getValueNames(),
-      this.valueUpdaterMethod.bind(this),
+      name ?? this.getParameterNames(),
+      "input",
+      this.bufferUpdaterMethod.bind(this),
     )
   }
   private connectResolution(
@@ -315,7 +503,8 @@ abstract class NoiseCanvas extends HTMLElement {
   ): void {
     this.connectTemplate(
       selectors,
-      name ?? NoiseCanvas.resolutionNames,
+      name ?? NoiseCanvas.RESOLUTION_NAMES,
+      "input",
       this.resolutionUpdaterMethod.bind(this),
     )
   }
@@ -325,15 +514,28 @@ abstract class NoiseCanvas extends HTMLElement {
   ): void {
     this.connectTemplate(
       selectors,
-      name ?? NoiseCanvas.progressNames,
+      name ?? NoiseCanvas.PROGRESS_NAMES,
+      "input",
       this.progressUpdaterMethod.bind(this),
+    )
+  }
+  private connectSeed(
+    selectors: Array<HTMLInputElement> | undefined = undefined,
+    name: string | undefined = undefined,
+  ): void {
+    this.connectTemplate(
+      selectors,
+      name ?? NoiseCanvas.SEED_NAMES,
+      "change",
+      this.bufferUpdaterMethod.bind(this),
     )
   }
 
   //                All Connections
   private connectAll(): void {
     const selectors = this.getSelectors()
-    this.connectValues(selectors)
+    this.connectSeed(selectors)
+    this.connectParameters(selectors)
     this.connectResolution(selectors)
     this.connectProgress(selectors)
   }
@@ -342,30 +544,24 @@ abstract class NoiseCanvas extends HTMLElement {
   //#region     Disconnect
   //                Base Disconnect
   private disconnectName(name: string): void {
-    const slider = this.valueInputs[name]
+    const slider = this.valuesRecord[name]
 
     if (slider instanceof InputContainer) {
       slider.disconnectUpdateMethod()
     }
-    delete this.valueInputs[name]
+    this.valuesRecord[name] = undefined
   }
 
   //                All Disconnect
   private disconnectAll(): void {
-    Object.values(this.valueInputs).forEach((slider: NoiseInputType) => {
+    Object.values(this.valuesRecord).forEach((slider: NoiseInputType) => {
       if (slider instanceof InputContainer) {
         slider.disconnectUpdateMethod()
       }
     })
-    this.valueInputs = {}
   }
   //#endregion
 
-  //#region     Direct Attribute Updaters
-  private updateAllowCanvasDisplay(): void {
-    this.allowCanvasDisplay = !(this.getAttribute("draw") === "false")
-  }
-  //#endregion
   //#endregion
 
   //#region Helper Methods
@@ -383,39 +579,44 @@ abstract class NoiseCanvas extends HTMLElement {
   }
   //#endregion
 
-  //#region     Base Value Accessing
-  private getValueFromType(val: NoiseInputType): string | undefined {
-    if (val === undefined) {
-      return undefined
-    }
-    if (typeof val === "string") {
-      return val
-    }
-    return val.getValue()
-  }
-  public getValue(name: string): string | undefined {
-    return this.getValueFromType(this.valueInputs[name])
-  }
-  //#endregion
-
   //#region     Progress
-  public getProgress(): number {
-    return Number(
-      this.getValue(NoiseCanvas.progressNames[0]) ??
-        NoiseCanvas.DEFAULT_PROGRESS,
-    )
-  }
+  private updateProgressCutoff(): void {
+    const pixelCutoff = this.getValue(NoiseCanvas.PROGRESS_NAMES[0])
 
-  private createProgressMemory(
-    countmaxIndex: number,
-  ): Uint8Array | Uint16Array | Uint32Array | undefined {
-    if (this.getAttribute("useProgress") !== "true") {
-      return undefined
+    if (pixelCutoff !== undefined) {
+      this.internalProgressCutoff = Number(pixelCutoff)
+    } else {
+      const pixelCount = this.getPixelCount()
+      const pixelRatio = this.getValue(NoiseCanvas.PROGRESS_NAMES[1])
+
+      if (pixelRatio !== undefined) {
+        this.internalProgressCutoff = Number(pixelRatio) * pixelCount
+      } else {
+        this.internalProgressCutoff = pixelCount
+      }
     }
 
-    if (countmaxIndex <= 0xff) return new Uint8Array(countmaxIndex)
-    if (countmaxIndex <= 0xffff) return new Uint16Array(countmaxIndex)
-    if (countmaxIndex <= 0xffffffff) return new Uint32Array(countmaxIndex)
+    this.forceDraw()
+  }
+
+  private createProgressMemory(countmaxIndex: number): void {
+    if (this.getAttribute("useProgress") !== "true") {
+      this.progressMemory = undefined
+      return
+    }
+
+    if (countmaxIndex <= 0xff) {
+      this.progressMemory = new Uint8Array(countmaxIndex)
+      return
+    }
+    if (countmaxIndex <= 0xffff) {
+      this.progressMemory = new Uint16Array(countmaxIndex)
+      return
+    }
+    if (countmaxIndex <= 0xffffffff) {
+      this.progressMemory = new Uint32Array(countmaxIndex)
+      return
+    }
 
     throw new Error(
       "Cannot save the progress of a canvas with more than 0xffffffff pixels.",
@@ -497,9 +698,29 @@ abstract class NoiseCanvas extends HTMLElement {
   }
   //#endregion
 
-  //#region     Simple Random Method
+  //#region     Random Methods
+  private settupSeed(): void {
+    const hash = mulberry32(this.getSeed())
+    this.randMethod = sfc32(hash(), hash(), hash(), hash())
+  }
+
+  protected random32bit(): number {
+    return this.randMethod()
+  }
+  protected random16bit(): number {
+    return this.randMethod() & 0xffff
+  }
   protected random8bit(): number {
-    return (Math.random() * 256) | 0
+    return this.randMethod() & 0xff
+  }
+
+  // [0, 1)
+  protected randomUFloat(): number {
+    return (this.randMethod() >>> 0) / 0x100000000
+  }
+  // [-1, 1)
+  protected randomFloat(): number {
+    return (this.randMethod() | 0) / 0x80000000
   }
   //#endregion
   //#endregion
@@ -515,7 +736,7 @@ customElements.define(
     //#endregion
 
     //#region Attribute Methods
-    protected getValueNames(): Array<string> {
+    protected getParameterNames(): Array<string> {
       return WhiteNoiseCanvas.customAttributes
     }
 
@@ -550,7 +771,7 @@ customElements.define(
     //#endregion
 
     //#region Attribute Methods
-    protected getValueNames(): Array<string> {
+    protected getParameterNames(): Array<string> {
       return GaussianNoise.customAttributes
     }
 
@@ -587,8 +808,8 @@ customElements.define(
       let u = 0
       let v = 0
 
-      while (u === 0) u = Math.random()
-      while (v === 0) v = Math.random()
+      while (u === 0) u = this.randomUFloat()
+      while (v === 0) v = this.randomUFloat()
 
       // Standard Normal Distribution (mean 0, stdev 1)
       return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
@@ -630,7 +851,7 @@ customElements.define(
     //#endregion
 
     //#region Attribute Methods
-    protected getValueNames(): Array<string> {
+    protected getParameterNames(): Array<string> {
       return RandomWalkNoise.customAttributes
     }
 
@@ -665,7 +886,7 @@ customElements.define(
             ? this.random8bit() - balancePoint
             : pInfo[0] / pInfo[1]) *
             pull +
-            (Math.random() * 2 - 1) * intensityScale,
+            Math.sign(this.randomFloat()) * intensityScale,
           -balancePoint,
           255 - balancePoint,
         )
