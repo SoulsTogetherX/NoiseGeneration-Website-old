@@ -1,4 +1,12 @@
-import { clamp, mulberry32, sfc32 } from "./helperMethods.js"
+import {
+  clamp,
+  mulberry32,
+  sfc32,
+  ColorString,
+  ColorValue,
+  colorStringToValue,
+  interpolateColors,
+} from "./helperMethods.js"
 
 //#region Noise Canvases
 //#region Abstract
@@ -41,6 +49,9 @@ abstract class NoiseCanvas extends HTMLElement {
     PROGRESS_RATIO: "progressRatio",
     USE_PROGRESS: "useProgress",
     DISABLE_UPDATES: "disableUpdates",
+    LIGHT_COLOR: "lightColor",
+    DARK_COLOR: "darkColor",
+    SEPARATE_COLORS: "separateColors",
     SEED: "seed",
   } as const
   //#endregion
@@ -131,7 +142,10 @@ abstract class NoiseCanvas extends HTMLElement {
 
   //#region Abstract Methods
   //    Used to write the desired texture, which will be kept until a refresh or a rewrite is requested
-  protected abstract writeTexture(texture: ImageData): void
+  protected abstract writeTexture(
+    texture: ImageData,
+    seperateColors: boolean,
+  ): void
   //    Used to return what attributes this NoiseType needs to function
   protected abstract getParameterNames(): string[]
   //    Used to return the default value of attributes unhandled by NoiseCanvas class
@@ -185,6 +199,15 @@ abstract class NoiseCanvas extends HTMLElement {
         case NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES:
           this.setDisableUpdates(newValue)
           break
+        case NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR:
+          this.setLightColor(newValue)
+          break
+        case NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR:
+          this.setDarkColor(newValue)
+          break
+        case NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS:
+          this.setSeperateColors(newValue)
+          break
         case NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED:
           this.setSeed(newValue)
           break
@@ -196,24 +219,26 @@ abstract class NoiseCanvas extends HTMLElement {
 
   //     Used to get the default value of defined internal attributes
   public getDefaultAttribute(name: string): any {
-    if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT) {
-      return undefined
-    } else if (NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION === name) {
-      return 50
-    } else if (
+    if (
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT ||
       NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X === name ||
-      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name
-    ) {
-      return undefined
-    } else if (
+      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name ||
       name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF ||
       name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO
     ) {
       return undefined
-    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS) {
+    } else if (NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION === name) {
+      return 50
+    } else if (
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS ||
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES ||
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
+    ) {
       return false
-    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES) {
-      return false
+    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR) {
+      return { r: 255, g: 255, b: 255, a: 255 } as ColorValue
+    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR) {
+      return { r: 0, g: 0, b: 0, a: 255 } as ColorValue
     } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED) {
       return (Math.random() * 255) >>> 0
     }
@@ -227,21 +252,23 @@ abstract class NoiseCanvas extends HTMLElement {
     } else if (
       NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION === name ||
       NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X === name ||
-      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name
-    ) {
-      return Number(val)
-    } else if (
+      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name ||
       name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO ||
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED
     ) {
       return Number(val)
     } else if (
       name === NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES ||
+      name == NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
     ) {
       return val === "true"
-    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED) {
-      return Number(val)
+    } else if (
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR ||
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR
+    ) {
+      return colorStringToValue(val as ColorString)
     }
     return this.parseParameter(name, val)
   }
@@ -318,6 +345,19 @@ abstract class NoiseCanvas extends HTMLElement {
     return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES)!
   }
 
+  //      Gets the light_color value saved in valuesRecord
+  public getLightColor(): ColorValue {
+    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR)!
+  }
+  //      Gets the dark_color value saved in valuesRecord
+  public getDarkColor(): ColorValue {
+    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR)!
+  }
+  //      Gets the separate_colors value saved in valuesRecord
+  public getSeperateColors(): boolean {
+    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS)!
+  }
+
   //      Gets the seed value saved in valuesRecord
   public getSeed(): number {
     return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED)!
@@ -327,107 +367,134 @@ abstract class NoiseCanvas extends HTMLElement {
   public getPixelCount(): number {
     return this.progressMemory?.length ?? 0
   }
-
-  //
+  //      Returns the canvas object being used to draw the texture on
   public getCanvas(): HTMLCanvasElement {
     return this.canvas
   }
-
-  //
-  public getImage() {}
   //#endregion
   //#endregion
 
   //#region         Direct Setters
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the inputs_root value, saved in valuesRecord
-  public setInputsRoots(val: any): void {
+  public setInputsRoots(val: Document | Element): void {
     this.valuesRecord[NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT] = val
     this.connectAll()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the resolution value, saved in valuesRecord
-  public setResolution(val: any): void {
+  public setResolution(val: string): void {
     const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectResolutionDependances(val)
+    this.connectResolutionDependances(undefined, val)
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the resolution_x value, saved in valuesRecord
-  public setResolutionX(val: any): void {
+  public setResolutionX(val: string): void {
     const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectResolutionDependances(val)
+    this.connectResolutionDependances(undefined, val)
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the resolution_y value, saved in valuesRecord
-  public setResolutionY(val: any): void {
+  public setResolutionY(val: string): void {
     const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectResolutionDependances(val)
+    this.connectResolutionDependances(undefined, val)
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the progress_cutoff value, saved in valuesRecord
-  public setProgressCutoff(val: any): void {
+  public setProgressCutoff(val: string): void {
     const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectProgressDependances(val)
+    this.connectProgressDependances(undefined, val)
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the progress_ratio value, saved in valuesRecord
-  public setProgressRatio(val: any): void {
+  public setProgressRatio(val: string): void {
     const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectProgressDependances(val)
+    this.connectProgressDependances(undefined, val)
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the use_progress value, saved in valuesRecord
-  public setUseProgress(val: any): void {
+  public setUseProgress(val: string): void {
     const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectProgressMemoryDependances(val)
+    this.connectProgressMemoryDependances(undefined, val)
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the disable_updates value, saved in valuesRecord
-  public setDisableUpdates(val: any): void {
+  public setDisableUpdates(val: string): void {
     const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectDrawDependances(val)
+    this.connectDrawDependances(undefined, val)
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the seed value, saved in valuesRecord
-  public setSeed(val: any): void {
+  public setLightColor(val: ColorString): void {
+    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.connectTextureDependances(undefined, val)
+  }
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the seed value, saved in valuesRecord
+  public setDarkColor(val: ColorString): void {
+    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.connectTextureDependances(undefined, val)
+  }
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the seperate_colors value, saved in valuesRecord
+  public setSeperateColors(val: string): void {
+    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
+    if (this.isValueConnected(name)) {
+      return
+    }
+
+    this.connectTextureDependances(undefined, val)
+  }
+
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the seed value, saved in valuesRecord
+  public setSeed(val: string): void {
     const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectTextureDependances(val)
+    this.connectTextureDependances(undefined, val)
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
@@ -442,7 +509,7 @@ abstract class NoiseCanvas extends HTMLElement {
       return
     }
 
-    this.connectTextureDependances(val)
+    this.connectTextureDependances(undefined, val)
   }
   //#endregion
   //#endregion
@@ -531,6 +598,9 @@ abstract class NoiseCanvas extends HTMLElement {
       name ?? [
         ...this.getParameterNames(),
         NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED,
+        NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR,
+        NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR,
+        NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS,
       ],
       this.scheduleTextureMethod.bind(this),
     )
@@ -643,7 +713,7 @@ abstract class NoiseCanvas extends HTMLElement {
     if (this.getDisableUpdates()) {
       return
     }
-
+    const start = performance.now()
     if (this.resolutionDirty) {
       this.resizeCanvas()
       this.resolutionDirty = false
@@ -662,6 +732,8 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.startTextureDraw()
+    const end = performance.now()
+    console.log(`Paint time: ${end - start} ms`)
   }
   //#endregion
 
@@ -690,7 +762,7 @@ abstract class NoiseCanvas extends HTMLElement {
     this.writePtr = 0
 
     this.settupSeed()
-    this.writeTexture(this.texture)
+    this.writeTexture(this.texture, this.getSeperateColors())
   }
 
   //    Forces the draw phase. It draws the already-generated texture on the canvas.
@@ -841,7 +913,28 @@ abstract class NoiseCanvas extends HTMLElement {
   //#region         Set Pixel
   //        Sets the pixel value, of unwriten texture, at the given index parameter. (Used in the write phase.)
   //        This also appends the index to the progressMemory for the draw phase.
-  protected setPixel(idx: number, v: number): void {
+  protected setPixelSoild(idx: number, v: number): void {
+    const [texture, light, dark] = [
+      this.texture,
+      this.getLightColor(),
+      this.getDarkColor(),
+    ]
+
+    if (this.progressMemory !== undefined) {
+      this.progressMemory[this.writePtr] = idx
+      this.writePtr += 1
+    }
+
+    const color = interpolateColors(dark, light, v / 255)
+
+    idx = idx << 2
+    texture.data[idx] = color.r
+    texture.data[idx + 1] = color.g
+    texture.data[idx + 2] = color.b
+    texture.data[idx + 3] = color.a
+  }
+  //
+  protected setPixelRGB(idx: number, r: number, g: number, b: number): void {
     const texture = this.texture
 
     if (this.progressMemory !== undefined) {
@@ -850,9 +943,9 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     idx = idx << 2
-    texture.data[idx] = v
-    texture.data[idx + 1] = v
-    texture.data[idx + 2] = v
+    texture.data[idx] = r
+    texture.data[idx + 1] = g
+    texture.data[idx + 2] = b
     texture.data[idx + 3] = 255
   }
   //#endregion
@@ -937,12 +1030,22 @@ customElements.define(
     //#endregion
 
     //#region Buffer Draw Method
-    protected writeTexture(texture: ImageData): void {
+    protected writeTexture(texture: ImageData, seperateColors: boolean): void {
       const [width, height] = [texture.width, texture.height]
+
+      const writer = seperateColors
+        ? (idx: number) =>
+            this.setPixelRGB(
+              idx,
+              this.random8bit(),
+              this.random8bit(),
+              this.random8bit(),
+            )
+        : (idx: number) => this.setPixelSoild(idx, this.random8bit())
 
       for (let r = 0; r < height; r++) {
         for (let c = 0; c < width; c++) {
-          this.setPixel(this.getIndex(r, c), this.random8bit())
+          writer(this.getIndex(r, c))
         }
       }
     }
@@ -970,7 +1073,7 @@ customElements.define(
     //        Returns the default value of all needed attribute parameters
     protected getDefaultParameter(name: string) {
       if (GaussianNoise.VARIABLE_NAMES.INTENSITY === name) {
-        return 1.0
+        return 255
       } else if (GaussianNoise.VARIABLE_NAMES.BALANCE_POINT === name) {
         return 128
       }
@@ -1008,7 +1111,7 @@ customElements.define(
     //#endregion
 
     //#region Buffer Draw Method
-    protected writeTexture(texture: ImageData): void {
+    protected writeTexture(texture: ImageData, seperateColors: boolean): void {
       const [width, height] = [texture.width, texture.height]
       const intensityScale = Number(
         this.getValue(GaussianNoise.VARIABLE_NAMES.INTENSITY),
@@ -1017,16 +1120,25 @@ customElements.define(
         this.getValue(GaussianNoise.VARIABLE_NAMES.BALANCE_POINT),
       )
 
+      const randomNumber = () =>
+        clamp(
+          ((this.standardNormal() * intensityScale) | 0) + balancePoint,
+          0,
+          255,
+        )
+      const writer = seperateColors
+        ? (idx: number) =>
+            this.setPixelRGB(
+              idx,
+              randomNumber(),
+              randomNumber(),
+              randomNumber(),
+            )
+        : (idx: number) => this.setPixelSoild(idx, randomNumber())
+
       for (let r = 0; r < height; r++) {
         for (let c = 0; c < width; c++) {
-          this.setPixel(
-            this.getIndex(r, c),
-            clamp(
-              ((this.standardNormal() * intensityScale) | 0) + balancePoint,
-              0,
-              255,
-            ),
-          )
+          writer(this.getIndex(r, c))
         }
       }
     }
@@ -1104,7 +1216,7 @@ customElements.define(
       ) {
         return 0
       } else if (RandomWalkNoise.VARIABLE_NAMES.INTENSITY === name) {
-        return 1.0
+        return 10
       } else if (RandomWalkNoise.VARIABLE_NAMES.BALANCE_POINT === name) {
         return 128
       } else if (RandomWalkNoise.VARIABLE_NAMES.PULL === name) {
@@ -1210,7 +1322,7 @@ customElements.define(
     //#endregion
 
     //#region Buffer Draw Method
-    protected writeTexture(texture: ImageData): void {
+    protected writeTexture(texture: ImageData, seperateColors: boolean): void {
       const [width, height] = [texture.width, texture.height]
 
       const sc = clamp(
@@ -1252,7 +1364,7 @@ customElements.define(
           255 - balancePoint,
         )
         memo[idx] = value
-        this.setPixel(idx, (value + balancePoint) | 0)
+        this.setPixelSoild(idx, (value + balancePoint) | 0)
       }
 
       switch (shape) {
