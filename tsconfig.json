@@ -2,6 +2,7 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     "target": "ES6",
+    "jsx": "preserve",
     "lib": ["es2017", "dom"],
     "rootDir": "./src",
     "outDir": "./dist"
