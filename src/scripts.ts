@@ -117,7 +117,6 @@ abstract class NoiseCanvas extends HTMLElement {
       <canvas></canvas>
     `
 
-    this.valuesRecord[NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED] = 0
     this.settupSeed()
 
     this.canvas = shadow.querySelector("canvas")!
@@ -135,8 +134,10 @@ abstract class NoiseCanvas extends HTMLElement {
   protected abstract writeTexture(texture: ImageData): void
   //    Used to return what attributes this NoiseType needs to function
   protected abstract getParameterNames(): string[]
-  //    Used to return the default value of the attributes defined by getParameterNames()
+  //    Used to return the default value of attributes unhandled by NoiseCanvas class
   protected abstract getDefaultParameter(name: string): any
+  //    Used to parse the string value of attributes unhandled by NoiseCanvas class
+  protected abstract parseParameter(name: string, val: string): any
   //#endregion
 
   //#region Virtual Methods
@@ -215,11 +216,34 @@ abstract class NoiseCanvas extends HTMLElement {
       return false
     } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED) {
       return (Math.random() * 255) >>> 0
-    } else if (this.getParameterNames().includes(name)) {
-      return this.getDefaultParameter(name)
     }
+    return this.getDefaultParameter(name)
+  }
 
-    return undefined
+  //      Parses the string value of handled attribute values. If unhandled, uses parseParameter instead.
+  private parseAttribute(name: string, val: string): any {
+    if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT) {
+      return undefined
+    } else if (
+      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION === name ||
+      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X === name ||
+      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name
+    ) {
+      return Number(val)
+    } else if (
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF ||
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO
+    ) {
+      return Number(val)
+    } else if (
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS ||
+      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES
+    ) {
+      return val === "true"
+    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED) {
+      return Number(val)
+    }
+    return this.parseParameter(name, val)
   }
   //#endregion
   //#endregion
@@ -286,19 +310,11 @@ abstract class NoiseCanvas extends HTMLElement {
   }
   //      Gets the use_progress value saved in valuesRecord
   public getUseProgress(): number {
-    console.log(
-      1,
-      this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES),
-    )
     return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS)!
   }
 
   //      Gets the disable_updates value saved in valuesRecord
   public getDisableUpdates(): boolean {
-    console.log(
-      2,
-      this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES),
-    )
     return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES)!
   }
 
@@ -311,6 +327,14 @@ abstract class NoiseCanvas extends HTMLElement {
   public getPixelCount(): number {
     return this.progressMemory?.length ?? 0
   }
+
+  //
+  public getCanvas(): HTMLCanvasElement {
+    return this.canvas
+  }
+
+  //
+  public getImage() {}
   //#endregion
   //#endregion
 
@@ -318,12 +342,7 @@ abstract class NoiseCanvas extends HTMLElement {
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the inputs_root value, saved in valuesRecord
   public setInputsRoots(val: any): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT
-    if (this.isValueConnected(name)) {
-      return
-    }
-
-    this.valuesRecord[name] = val
+    this.valuesRecord[NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT] = val
     this.connectAll()
   }
 
@@ -336,7 +355,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectResolutionDependances(val)
-    this.scheduleResolutionRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the resolution_x value, saved in valuesRecord
@@ -347,7 +365,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectResolutionDependances(val)
-    this.scheduleResolutionRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the resolution_y value, saved in valuesRecord
@@ -358,7 +375,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectResolutionDependances(val)
-    this.scheduleResolutionRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
@@ -370,7 +386,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectProgressDependances(val)
-    this.scheduleProgressRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the progress_ratio value, saved in valuesRecord
@@ -381,7 +396,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectProgressDependances(val)
-    this.scheduleProgressRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the use_progress value, saved in valuesRecord
@@ -392,7 +406,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectProgressMemoryDependances(val)
-    this.scheduleProgressMemoryRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
@@ -404,7 +417,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectDrawDependances(val)
-    this.scheduleDrawRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
@@ -416,7 +428,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectTextureDependances(val)
-    this.scheduleTextureRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
@@ -432,7 +443,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.connectTextureDependances(val)
-    this.scheduleTextureRefresh()
   }
   //#endregion
   //#endregion
@@ -456,11 +466,13 @@ abstract class NoiseCanvas extends HTMLElement {
           sliderId as HTMLInputElement,
           onUpdate,
         )
+        onUpdate()
         return
       }
 
-      this.valuesRecord[name] = attribute
-      console.log(name, this.valuesRecord[name])
+      this.valuesRecord[name] = this.parseAttribute(name, attribute)
+      onUpdate()
+      return
     }
 
     const slider: HTMLInputElement | undefined = fallback.find(
@@ -468,10 +480,12 @@ abstract class NoiseCanvas extends HTMLElement {
     )
     if (slider !== undefined) {
       this.valuesRecord[name] = new InputContainer(slider, onUpdate)
+      onUpdate()
       return
     }
 
     this.valuesRecord[name] = this.getDefaultAttribute(name)
+    onUpdate()
   }
 
   //      An abstract template used to connect an attribute for updates, or a direct set to the attribute in valuesRecord
@@ -622,14 +636,14 @@ abstract class NoiseCanvas extends HTMLElement {
   //                Schedules a refresh
   private scheduleDrawRefresh(): void {
     cancelAnimationFrame(this.rafId)
-
-    if (this.getDisableUpdates()) {
-      return
-    }
     this.rafId = requestAnimationFrame(() => this.canvasRefresh())
   }
   //                 Enacts a refresh, processing what is needed according to dirty flags
   private canvasRefresh(): void {
+    if (this.getDisableUpdates()) {
+      return
+    }
+
     if (this.resolutionDirty) {
       this.resizeCanvas()
       this.resolutionDirty = false
@@ -669,8 +683,6 @@ abstract class NoiseCanvas extends HTMLElement {
     canvas.width = canvasX
     canvas.height = canvasY
     this.texture = new ImageData(canvasX, canvasY)
-
-    this.createProgressMemory(canvasX * canvasY)
   }
 
   //    Starts the write phase. It resets the seed and writePtr and then calls the abstract texture-writer method
@@ -910,11 +922,17 @@ customElements.define(
   "white-noise",
   class WhiteNoiseCanvas extends NoiseCanvas {
     //#region Attribute Methods
+    //        Returns needed attribute parameters
     protected getParameterNames(): string[] {
       return []
     }
+    //        Returns the default value of all needed attribute parameters
     protected getDefaultParameter(name: string) {
       return undefined
+    }
+    //        Parses the attribute string with the expected value
+    protected parseParameter(name: string, val: string): any {
+      return val
     }
     //#endregion
 
@@ -945,9 +963,11 @@ customElements.define(
     //#endregion
 
     //#region Attribute Methods
+    //        Returns needed attribute parameters
     protected getParameterNames(): string[] {
       return Object.values(GaussianNoise.VARIABLE_NAMES)
     }
+    //        Returns the default value of all needed attribute parameters
     protected getDefaultParameter(name: string) {
       if (GaussianNoise.VARIABLE_NAMES.INTENSITY === name) {
         return 1.0
@@ -955,6 +975,13 @@ customElements.define(
         return 128
       }
       return undefined
+    }
+    //        Parses the attribute string with the expected value
+    protected parseParameter(name: string, val: string): any {
+      if (GaussianNoise.VARIABLE_NAMES.INTENSITY === name) {
+        return Number(val)
+      }
+      return val
     }
 
     static get observedAttributes(): string[] {
@@ -1086,6 +1113,24 @@ customElements.define(
         return "spread"
       }
       return undefined
+    }
+    //        Parses the attribute string with the expected value
+    protected parseParameter(name: string, val: string): any {
+      if (
+        RandomWalkNoise.VARIABLE_NAMES.SOURCE_COLUMN === name ||
+        RandomWalkNoise.VARIABLE_NAMES.SOURCE_ROW === name
+      ) {
+        return Number(val)
+      } else if (RandomWalkNoise.VARIABLE_NAMES.INTENSITY === name) {
+        return Number(val)
+      } else if (RandomWalkNoise.VARIABLE_NAMES.BALANCE_POINT === name) {
+        return Number(val)
+      } else if (RandomWalkNoise.VARIABLE_NAMES.PULL === name) {
+        return Number(val)
+      } else if (RandomWalkNoise.VARIABLE_NAMES.SHAPE === name) {
+        return val
+      }
+      return val
     }
 
     static get observedAttributes(): string[] {
