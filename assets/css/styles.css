@@ -29,10 +29,25 @@
   color-scheme: light dark;
 
   --nav-width: max(15vw, 8rem);
-  --links-width: 3rem;
+  --sidebar-width: 3rem;
 
-  background-color: var(--bg-dark);
+  background: linear-gradient(
+    -5deg,
+    rgb(0, 0, 0) 0 2%,
+    var(--bg-light) 30% 100%
+  );
+
   color: var(--primary-text);
+
+  font-family: "DM Sans", sans-serif;
+  font-optical-sizing: auto;
+}
+
+a {
+  color: var(--highlight);
+}
+a:visited {
+  color: var(--seconary-accent);
 }
 /*#endregion*/
 
@@ -52,10 +67,17 @@
 }
 /*#endregion*/
 
+/*#region Transition */
+@view-transition {
+  navigation: auto;
+}
+/*#endregion*/
+
 /*#region Nav Bar */
-#nav-bar {
+#nav-menu {
   display: block;
   position: fixed;
+
   z-index: 1;
 
   padding: 1rem 0.5rem;
@@ -64,76 +86,217 @@
   height: 100%;
 
   background-color: var(--nav-bg);
-}
-#nav-bar .nav-ul {
-  align-items: center;
-}
-#nav-bar .nav-ul li {
-  list-style-type: none;
-  text-align: center;
 
+  transition: ease 0.5s;
+
+  .nav-ul {
+    align-items: center;
+
+    li {
+      list-style-type: none;
+      text-align: center;
+
+      cursor: pointer;
+
+      margin: 0.5rem 0rem;
+    }
+  }
+}
+.mobile #nav-menu {
+  transform: translateX(calc(var(--nav-width) * -1));
+}
+.mobile #nav-menu.active {
+  transform: translateX(0);
+}
+
+#nav-button {
   cursor: pointer;
+  display: none;
+  z-index: 2;
 
-  margin: 0.5rem 0rem;
+  background-color: transparent;
+}
+
+.mobile #nav-button {
+  --bar-height: 0.35rem;
+
+  display: block;
+  position: fixed;
+
+  top: 0;
+  left: 0;
+
+  height: 2rem;
+  width: 2rem;
+
+  div {
+    display: block;
+    position: absolute;
+
+    left: 10%;
+    top: 50%;
+
+    height: var(--bar-height);
+    width: 80%;
+
+    transform: rotate(0deg);
+
+    border-radius: 10px;
+    background-color: #000;
+  }
+
+  :first-child {
+    top: calc(25% - var(--bar-height) * 0.5);
+    transition: ease 0.3s;
+  }
+  :nth-child(2) {
+    top: calc(50% - var(--bar-height) * 0.5);
+    transition: ease 0.3s;
+  }
+  :last-child {
+    top: calc(75% - var(--bar-height) * 0.5);
+    transition: ease 0.3s;
+  }
+}
+#nav-button.active {
+  :first-child {
+    top: 40%;
+    transform: rotate(-45deg);
+  }
+  :nth-child(2) {
+    opacity: 0;
+  }
+  :last-child {
+    top: 40%;
+    transform: rotate(45deg);
+  }
 }
 /*#endregion*/
 
 /*#region Home Styles */
-#home-h1 {
+#home-bg {
+  display: grid;
   position: absolute;
+  inset: 0;
 
-  top: 30%;
-  left: 0;
+  z-index: -1;
 
-  text-align: left;
+  .home-noise-bg {
+    grid-area: 1 / 1;
+
+    width: 100%;
+    height: 100%;
+  }
 }
-#home-text {
-  margin-top: auto;
+
+#home-header {
+  display: flex;
+  flex-direction: column;
+
+  height: 100%;
+
+  h1 {
+    flex: 1;
+
+    margin: 4rem 0;
+    margin-right: var(--sidebar-width);
+
+    max-width: max(60vw, 20rem);
+
+    align-content: center;
+    text-align: left;
+    vertical-align: middle;
+
+    font-size: 5rem;
+    font-weight: 200;
+    font-style: normal;
+
+    text-shadow: 16px 20px 16px rgba(0, 0, 0, 0.8);
+  }
+
+  div {
+    display: block;
+
+    margin: 0 auto;
+    padding: 2rem;
+    padding-bottom: 1.5rem;
+
+    width: fit-content;
+
+    font-size: 1.1rem;
+
+    text-shadow: 4px 4px 16px rgba(0, 0, 0, 0.8);
+    color: #fff;
+  }
+}
+.mobile #home-header {
+  h1 {
+    font-size: 4rem;
+  }
+  div {
+    line-height: 1.5rem;
+    font-size: 0.8rem;
+  }
 }
 /*#endregion*/
 
-/*#region Links Bar */
-#content-wrapper .links-bar {
-  display: block;
+/*#region sidebar */
+#sidebar {
   position: fixed;
   right: 0;
+  top: 0;
 
-  width: var(--links-width);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-content: center;
 
-  padding: 1rem 0.5rem;
+  width: var(--sidebar-width);
+
+  .icon {
+    align-items: center;
+    justify-content: center;
+
+    height: 2em;
+    width: 2em;
+
+    margin-top: 10px;
+
+    svg {
+      color: #000;
+      width: 100%;
+      height: 100%;
+    }
+  }
 }
 /*#endregion*/
 
 /*#region Main Content */
 #content-wrapper {
+  position: relative;
   display: block;
+  overflow: hidden;
+  isolation: isolate;
 
   margin-left: var(--nav-width);
 
-  padding: 1.5rem 1.5rem;
-
   width: 100%;
   min-height: max(100%, 100vh);
+
+  .content-body {
+    position: relative;
+    isolation: isolate;
+
+    width: 100%;
+    height: 100%;
+
+    padding: 0rem 1.5rem;
+
+    text-align: center;
+  }
+}
+.mobile #content-wrapper {
+  margin-left: 0;
 }
 
-#content-wrapper .content-body {
-  isolation: isolate;
-  position: relative;
-
-  width: 100%;
-  height: 100%;
-
-  text-align: center;
-}
 /*#endregion*/
-
-.noise-holder {
-  display: block;
-  position: relative;
-  width: 40%;
-  aspect-ratio: 1;
-
-  overflow: hidden;
-
-  background-color: black;
-}

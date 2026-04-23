@@ -11,6 +11,17 @@ import {
 //#region Noise Canvases
 //#region Abstract
 //#region     Needed Types
+type ObjectFit =
+  | "contain"
+  | "cover"
+  | "fill"
+  | "none"
+  | "scale-down"
+  | "inherit"
+  | "initial"
+  | "revert"
+  | "unset"
+
 class InputContainer {
   // The attached input
   private readonly inputElement: HTMLInputElement
@@ -18,7 +29,7 @@ class InputContainer {
   private readonly onUpdateMethod: () => void
 
   // The Class Constructor
-  constructor(inputElement: HTMLInputElement, onUpdate: () => void) {
+  public constructor(inputElement: HTMLInputElement, onUpdate: () => void) {
     this.inputElement = inputElement
     this.onUpdateMethod = onUpdate
 
@@ -30,17 +41,18 @@ class InputContainer {
     this.inputElement.removeEventListener("input", this.onUpdateMethod)
   }
   // Gets the value of the attached 'HTMLInputElement' element input
-  public getValue(): any {
+  get value(): any {
     return this.inputElement.value
   }
 }
 //#endregion
 
 //#region     Class Definition
-abstract class NoiseCanvas extends HTMLElement {
+export abstract class HTMLNoiseCanvasElement extends HTMLElement {
   //#region Constants
   //    Internal Variable Names
   private static readonly INTERAL_VARIABLE_NAMES = {
+    OBJECT_FIT: "objectFit",
     INPUTS_ROOT: "inputsRoot",
     RESOLUTION: "resolution",
     RESOLUTION_X: "resolutionX",
@@ -58,7 +70,7 @@ abstract class NoiseCanvas extends HTMLElement {
 
   //#region Private Variables
   //    The Canvas and context objects used to draw on
-  private readonly canvas: HTMLCanvasElement
+  private readonly _canvas: HTMLCanvasElement
   private readonly ctx: CanvasRenderingContext2D
 
   //    Stores all generated info of the noise texture. Updated only in the writing phase, triggered only when
@@ -96,7 +108,7 @@ abstract class NoiseCanvas extends HTMLElement {
   private readonly scheduleTextureMethod: () => void =
     this.scheduleTextureRefresh.bind(this)
   //    Used when an HTMLInputElement, in valuesRecord, that changes the size of the progress buffer.
-  private readonly scheduleProgresMemorysMethod: () => void =
+  private readonly scheduleProgressMemoryMethod: () => void =
     this.scheduleProgressMemoryRefresh.bind(this)
   //    Used when an HTMLInputElement, in valuesRecord, that changes the progress cutoff.
   private readonly scheduleProgressMethod: () => void =
@@ -110,7 +122,7 @@ abstract class NoiseCanvas extends HTMLElement {
   //#endregion
 
   //#region Constructor
-  constructor() {
+  public constructor() {
     super()
 
     const shadow = this.attachShadow({ mode: "closed" })
@@ -130,12 +142,17 @@ abstract class NoiseCanvas extends HTMLElement {
 
     this.settupSeed()
 
-    this.canvas = shadow.querySelector("canvas")!
+    this._canvas = shadow.querySelector("canvas")!
+
     const ctx = this.canvas.getContext("2d")
     if (!ctx) throw new Error("2D canvas context not available")
 
     ctx.imageSmoothingEnabled = false
     this.ctx = ctx
+
+    this.canvas.style.objectFit = (this.getAttribute(
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.OBJECT_FIT,
+    ) ?? "cover") as ObjectFit
     this.texture = new ImageData(1, 1)
   }
   //#endregion
@@ -148,19 +165,19 @@ abstract class NoiseCanvas extends HTMLElement {
   ): void
   //    Used to return what attributes this NoiseType needs to function
   protected abstract getParameterNames(): string[]
-  //    Used to return the default value of attributes unhandled by NoiseCanvas class
+  //    Used to return the default value of attributes unhandled by HTMLNoiseCanvasElement class
   protected abstract getDefaultParameter(name: string): any
-  //    Used to parse the string value of attributes unhandled by NoiseCanvas class
+  //    Used to parse the string value of attributes unhandled by HTMLNoiseCanvasElement class
   protected abstract parseParameter(name: string, val: string): any
   //#endregion
 
   //#region Virtual Methods
   //#region     Dom Enter/Exit
-  connectedCallback(): void {
+  protected connectedCallback(): void {
     this.connectAll()
     this.scheduleResolutionRefresh()
   }
-  disconnectedCallback(): void {
+  protected disconnectedCallback(): void {
     cancelAnimationFrame(this.rafId)
     this.disconnectAll()
   }
@@ -168,51 +185,56 @@ abstract class NoiseCanvas extends HTMLElement {
 
   //#region     Attribute Changes
   static get observedAttributes(): string[] {
-    return Object.values(NoiseCanvas.INTERAL_VARIABLE_NAMES)
+    return Object.values(HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES)
   }
 
   //     Called to react to attribute changes in the DOM
   attributeChangedCallback(name: string, oldValue: any, newValue: any): void {
     if (oldValue !== newValue) {
+      const parsed = this.parseAttribute(name, newValue)
+
       switch (name) {
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT:
-          this.setInputsRoots(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.OBJECT_FIT:
+          this.canvas.style.objectFit = (newValue ?? "cover") as ObjectFit
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION:
-          this.setResolution(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.INPUTS_ROOT:
+          this.inputsRoots = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X:
-          this.setResolutionX(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION:
+          this.resolution = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y:
-          this.setResolutionY(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_X:
+          this.resolution = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF:
-          this.setProgressCutoff(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_Y:
+          this.resolutionX = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO:
-          this.setProgressRatio(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF:
+          this.progressCutoff = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS:
-          this.setUseProgress(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO:
+          this.progressRatio = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES:
-          this.setDisableUpdates(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.USE_PROGRESS:
+          this.useProgress = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR:
-          this.setLightColor(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES:
+          this.disableUpdates = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR:
-          this.setDarkColor(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.LIGHT_COLOR:
+          this.lightColor = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS:
-          this.setSeperateColors(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DARK_COLOR:
+          this.darkColor = parsed
           break
-        case NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED:
-          this.setSeed(newValue)
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS:
+          this.seperateColors = parsed
+          break
+        case HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEED:
+          this.seed = parsed
           break
         default:
-          this.setParameter(name, newValue)
+          this.setParameter(name, parsed)
       }
     }
   }
@@ -220,26 +242,32 @@ abstract class NoiseCanvas extends HTMLElement {
   //     Used to get the default value of defined internal attributes
   public getDefaultAttribute(name: string): any {
     if (
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT ||
-      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X === name ||
-      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.INPUTS_ROOT ||
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_X === name ||
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO
     ) {
       return undefined
-    } else if (NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION === name) {
+    } else if (
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION === name
+    ) {
       return 50
     } else if (
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.USE_PROGRESS ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
     ) {
       return false
-    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR) {
+    } else if (
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.LIGHT_COLOR
+    ) {
       return { r: 255, g: 255, b: 255, a: 255 } as ColorValue
-    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR) {
+    } else if (
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DARK_COLOR
+    ) {
       return { r: 0, g: 0, b: 0, a: 255 } as ColorValue
-    } else if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED) {
+    } else if (name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEED) {
       return (Math.random() * 255) >>> 0
     }
     return this.getDefaultParameter(name)
@@ -247,26 +275,26 @@ abstract class NoiseCanvas extends HTMLElement {
 
   //      Parses the string value of handled attribute values. If unhandled, uses parseParameter instead.
   private parseAttribute(name: string, val: string): any {
-    if (name === NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT) {
+    if (name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.INPUTS_ROOT) {
       return undefined
     } else if (
-      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION === name ||
-      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X === name ||
-      NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION === name ||
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_X === name ||
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_Y === name ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEED
     ) {
       return Number(val)
     } else if (
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES ||
-      name == NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.USE_PROGRESS ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES ||
+      name == HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
     ) {
       return val === "true"
     } else if (
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR ||
-      name === NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.LIGHT_COLOR ||
+      name === HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DARK_COLOR
     ) {
       return colorStringToValue(val as ColorString)
     }
@@ -282,7 +310,7 @@ abstract class NoiseCanvas extends HTMLElement {
   //      is from a connected HTMLInputElement.
   private getValueFromType(val: any): any | undefined {
     if (val instanceof InputContainer) {
-      return val.getValue()
+      return val.value()
     }
     return val
   }
@@ -299,77 +327,96 @@ abstract class NoiseCanvas extends HTMLElement {
 
   //#region             Specific
   //      Gets the inputs_root value saved in valuesRecord
-  public getInputsRoots(): Document | Element {
-    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT)!
+  get inputsRoots(): Document | Element {
+    return this.getValue(
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.INPUTS_ROOT,
+    )!
   }
 
   //      Gets the resolution value saved in valuesRecord
-  public getResolution(): number {
-    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION)!
+  get resolution(): number {
+    return this.getValue(
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION,
+    )!
   }
   //      Gets the resolution_x value saved in valuesRecord
-  public getResolutionX(): number {
+  get resolutionX(): number {
     return (
-      this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X) ??
-      this.getResolution()
+      this.getValue(
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_X,
+      ) ?? this.resolution
     )
   }
   //      Gets the resolution_y value saved in valuesRecord
-  public getResolutionY(): number {
+  get resolutionY(): number {
     return (
-      this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y) ??
-      this.getResolution()
+      this.getValue(
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_Y,
+      ) ?? this.resolution
     )
   }
 
   //      Gets the progress_cutoff value saved in valuesRecord
-  public getProgressCutoff(): number {
+  get progressCutoff(): number {
     return (
-      this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF) ??
-      this.getPixelCount()
+      this.getValue(
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF,
+      ) ?? this.pixelCount
     )
   }
   //      Gets the progress_ratio value saved in valuesRecord
-  public getProgressRatio(): number {
+  get progressRatio(): number {
     return (
-      this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO) ?? 1.0
+      this.getValue(
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO,
+      ) ?? 1.0
     )
   }
   //      Gets the use_progress value saved in valuesRecord
-  public getUseProgress(): number {
-    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS)!
+  get useProgress(): number {
+    return this.getValue(
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.USE_PROGRESS,
+    )!
   }
 
   //      Gets the disable_updates value saved in valuesRecord
-  public getDisableUpdates(): boolean {
-    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES)!
+  get disableUpdates(): boolean {
+    return this.getValue(
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES,
+    )!
   }
 
   //      Gets the light_color value saved in valuesRecord
-  public getLightColor(): ColorValue {
-    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR)!
+  get lightColor(): ColorValue {
+    return this.getValue(
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.LIGHT_COLOR,
+    )!
   }
   //      Gets the dark_color value saved in valuesRecord
-  public getDarkColor(): ColorValue {
-    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR)!
+  get darkColor(): ColorValue {
+    return this.getValue(
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DARK_COLOR,
+    )!
   }
   //      Gets the separate_colors value saved in valuesRecord
-  public getSeperateColors(): boolean {
-    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS)!
+  get seperateColors(): boolean {
+    return this.getValue(
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS,
+    )!
   }
 
   //      Gets the seed value saved in valuesRecord
-  public getSeed(): number {
-    return this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED)!
+  get seed(): number {
+    return this.getValue(HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEED)!
   }
 
   //      Gets the pixel_count value of the canvas (width * height)
-  public getPixelCount(): number {
+  get pixelCount(): number {
     return this.progressMemory?.length ?? 0
   }
   //      Returns the canvas object being used to draw the texture on
-  public getCanvas(): HTMLCanvasElement {
-    return this.canvas
+  get canvas(): HTMLCanvasElement {
+    return this._canvas
   }
   //#endregion
   //#endregion
@@ -377,124 +424,137 @@ abstract class NoiseCanvas extends HTMLElement {
   //#region         Direct Setters
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the inputs_root value, saved in valuesRecord
-  public setInputsRoots(val: Document | Element): void {
-    this.valuesRecord[NoiseCanvas.INTERAL_VARIABLE_NAMES.INPUTS_ROOT] = val
+  set inputsRoots(val: Document | Element) {
+    this.valuesRecord[
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.INPUTS_ROOT
+    ] = val
     this.connectAll()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the resolution value, saved in valuesRecord
-  public setResolution(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION
+  set resolution(val: number) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectResolutionDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleResolutionRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the resolution_x value, saved in valuesRecord
-  public setResolutionX(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X
+  set resolutionX(val: number) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_X
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectResolutionDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleResolutionRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the resolution_y value, saved in valuesRecord
-  public setResolutionY(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y
+  set resolutionY(val: number) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_Y
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectResolutionDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleResolutionRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the progress_cutoff value, saved in valuesRecord
-  public setProgressCutoff(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF
+  set progressCutoff(val: number) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectProgressDependances(undefined, val)
+    this.valuesRecord[name] = clamp(val, 0, this.pixelCount)
+    this.scheduleProgressRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the progress_ratio value, saved in valuesRecord
-  public setProgressRatio(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO
+  set progressRatio(val: number) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectProgressDependances(undefined, val)
+    this.valuesRecord[name] = clamp(val, 0.0, 1.0)
+    this.scheduleProgressRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the use_progress value, saved in valuesRecord
-  public setUseProgress(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS
+  set useProgress(val: boolean) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.USE_PROGRESS
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectProgressMemoryDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleProgressMemoryRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the disable_updates value, saved in valuesRecord
-  public setDisableUpdates(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES
+  set disableUpdates(val: boolean) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectDrawDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleDrawRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the seed value, saved in valuesRecord
-  public setLightColor(val: ColorString): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR
+  set lightColor(val: ColorString | ColorValue) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.LIGHT_COLOR
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectTextureDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleTextureRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the seed value, saved in valuesRecord
-  public setDarkColor(val: ColorString): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR
+  set darkColor(val: ColorString | ColorValue) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DARK_COLOR
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectTextureDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleTextureRefresh()
   }
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the seperate_colors value, saved in valuesRecord
-  public setSeperateColors(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
+  set seperateColors(val: boolean) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectTextureDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleTextureRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
   //      sets the seed value, saved in valuesRecord
-  public setSeed(val: string): void {
-    const name = NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED
+  set seed(val: number) {
+    const name = HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEED
     if (this.isValueConnected(name)) {
       return
     }
 
-    this.connectTextureDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleTextureRefresh()
   }
 
   //      Assuming this is not a value connected from an HTMLInputElement, this method
@@ -509,7 +569,8 @@ abstract class NoiseCanvas extends HTMLElement {
       return
     }
 
-    this.connectTextureDependances(undefined, val)
+    this.valuesRecord[name] = val
+    this.scheduleTextureRefresh()
   }
   //#endregion
   //#endregion
@@ -551,8 +612,10 @@ abstract class NoiseCanvas extends HTMLElement {
       return
     }
 
-    this.valuesRecord[name] = this.getDefaultAttribute(name)
-    onUpdate()
+    if (!(name in this.valuesRecord)) {
+      this.valuesRecord[name] = this.getDefaultAttribute(name)
+      onUpdate()
+    }
   }
 
   //      An abstract template used to connect an attribute for updates, or a direct set to the attribute in valuesRecord
@@ -581,9 +644,9 @@ abstract class NoiseCanvas extends HTMLElement {
     this.connectTemplate(
       selectors,
       name ?? [
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION,
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X,
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_X,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_Y,
       ],
       this.scheduleResolutionMethod.bind(this),
     )
@@ -597,10 +660,10 @@ abstract class NoiseCanvas extends HTMLElement {
       selectors,
       name ?? [
         ...this.getParameterNames(),
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.SEED,
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.LIGHT_COLOR,
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.DARK_COLOR,
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEED,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.LIGHT_COLOR,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DARK_COLOR,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.SEPARATE_COLORS,
       ],
       this.scheduleTextureMethod.bind(this),
     )
@@ -612,8 +675,8 @@ abstract class NoiseCanvas extends HTMLElement {
   ): void {
     this.connectTemplate(
       selectors,
-      name ?? [NoiseCanvas.INTERAL_VARIABLE_NAMES.USE_PROGRESS],
-      this.scheduleProgresMemorysMethod.bind(this),
+      name ?? [HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.USE_PROGRESS],
+      this.scheduleProgressMemoryMethod.bind(this),
     )
   }
   //      The default connector for progress updates
@@ -624,8 +687,8 @@ abstract class NoiseCanvas extends HTMLElement {
     this.connectTemplate(
       selectors,
       name ?? [
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF,
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO,
       ],
       this.scheduleProgressMethod.bind(this),
     )
@@ -637,7 +700,7 @@ abstract class NoiseCanvas extends HTMLElement {
   ): void {
     this.connectTemplate(
       selectors,
-      name ?? [NoiseCanvas.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES],
+      name ?? [HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.DISABLE_UPDATES],
       this.scheduleDrawMethod.bind(this),
     )
   }
@@ -659,11 +722,10 @@ abstract class NoiseCanvas extends HTMLElement {
     if (!(name in this.valuesRecord)) return
 
     const slider = this.valuesRecord[name]
-
     if (slider instanceof InputContainer) {
       slider.disconnectUpdateMethod()
+      delete this.valuesRecord[name]
     }
-    this.valuesRecord[name] = undefined
   }
 
   //      A methods that disconnects all HTMLInputElements saved in the valuesRecord
@@ -710,10 +772,9 @@ abstract class NoiseCanvas extends HTMLElement {
   }
   //                 Enacts a refresh, processing what is needed according to dirty flags
   private canvasRefresh(): void {
-    if (this.getDisableUpdates()) {
+    if (this.disableUpdates) {
       return
     }
-    const start = performance.now()
     if (this.resolutionDirty) {
       this.resizeCanvas()
       this.resolutionDirty = false
@@ -732,8 +793,6 @@ abstract class NoiseCanvas extends HTMLElement {
     }
 
     this.startTextureDraw()
-    const end = performance.now()
-    console.log(`Paint time: ${end - start} ms`)
   }
   //#endregion
 
@@ -742,14 +801,16 @@ abstract class NoiseCanvas extends HTMLElement {
   private resizeCanvas(): void {
     const canvas = this.canvas
 
-    const baseResolution = this.getResolution()!
+    const baseResolution = this.resolution!
     const canvasX = Number(
-      this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_X) ??
-        baseResolution,
+      this.getValue(
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_X,
+      ) ?? baseResolution,
     )
     const canvasY = Number(
-      this.getValue(NoiseCanvas.INTERAL_VARIABLE_NAMES.RESOLUTION_Y) ??
-        baseResolution,
+      this.getValue(
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.RESOLUTION_Y,
+      ) ?? baseResolution,
     )
 
     canvas.width = canvasX
@@ -762,7 +823,7 @@ abstract class NoiseCanvas extends HTMLElement {
     this.writePtr = 0
 
     this.settupSeed()
-    this.writeTexture(this.texture, this.getSeperateColors())
+    this.writeTexture(this.texture, this.seperateColors)
   }
 
   //    Forces the draw phase. It draws the already-generated texture on the canvas.
@@ -775,7 +836,7 @@ abstract class NoiseCanvas extends HTMLElement {
   }
   //    Checks for base cases that can be used to skip uneeded processing, before attempting costly drawing.
   private drawCheck(texture: ImageData, cutoff: number): boolean {
-    if (this.progressMemory === undefined || cutoff >= this.getPixelCount()) {
+    if (this.progressMemory === undefined || cutoff >= this.pixelCount) {
       this.ctx.putImageData(texture, 0, 0)
       return false
     }
@@ -829,15 +890,15 @@ abstract class NoiseCanvas extends HTMLElement {
   //      Sets the cuttoff point for drawing to the canvas.
   private updateProgressCutoff(): void {
     const progressCutoff = this.getValue(
-      NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF,
+      HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_CUTOFF,
     )
 
     if (progressCutoff !== undefined) {
       this.internalProgressCutoff = Number(progressCutoff)
     } else {
-      const pixelCount = this.getPixelCount()
+      const pixelCount = this.pixelCount
       const pixelRatio = this.getValue(
-        NoiseCanvas.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO,
+        HTMLNoiseCanvasElement.INTERAL_VARIABLE_NAMES.PROGRESS_RATIO,
       )
 
       if (pixelRatio !== undefined) {
@@ -851,7 +912,7 @@ abstract class NoiseCanvas extends HTMLElement {
   //        Dynamically creates an array of numbers to hold indexes. The array's bit size changes depending
   //        on the size of indexes it needs to store
   private createProgressMemory(maxIndex: number): void {
-    if (!this.getUseProgress()) {
+    if (!this.useProgress) {
       this.progressMemory = undefined
       return
     }
@@ -916,8 +977,8 @@ abstract class NoiseCanvas extends HTMLElement {
   protected setPixelSoild(idx: number, v: number): void {
     const [texture, light, dark] = [
       this.texture,
-      this.getLightColor(),
-      this.getDarkColor(),
+      this.lightColor,
+      this.darkColor,
     ]
 
     if (this.progressMemory !== undefined) {
@@ -979,7 +1040,7 @@ abstract class NoiseCanvas extends HTMLElement {
   //#region     Random Methods
   //        Sets up the randMethod's sfc32 method, based on the current seed of this element
   private settupSeed(): void {
-    const hash = mulberry32(this.getSeed())
+    const hash = mulberry32(this.seed)
     this.randMethod = sfc32(hash(), hash(), hash(), hash())
   }
 
@@ -1011,174 +1072,165 @@ abstract class NoiseCanvas extends HTMLElement {
 //#endregion
 
 //#region White Noise
-customElements.define(
-  "white-noise",
-  class WhiteNoiseCanvas extends NoiseCanvas {
-    //#region Attribute Methods
-    //        Returns needed attribute parameters
-    protected getParameterNames(): string[] {
-      return []
-    }
-    //        Returns the default value of all needed attribute parameters
-    protected getDefaultParameter(name: string) {
-      return undefined
-    }
-    //        Parses the attribute string with the expected value
-    protected parseParameter(name: string, val: string): any {
-      return val
-    }
-    //#endregion
+export class HTMLWhiteNoiseElement extends HTMLNoiseCanvasElement {
+  //#region Attribute Methods
+  //        Returns needed attribute parameters
+  protected override getParameterNames(): string[] {
+    return []
+  }
+  //        Returns the default value of all needed attribute parameters
+  protected override getDefaultParameter(name: string) {
+    return undefined
+  }
+  //        Parses the attribute string with the expected value
+  protected override parseParameter(name: string, val: string): any {
+    return val
+  }
+  //#endregion
 
-    //#region Buffer Draw Method
-    protected writeTexture(texture: ImageData, seperateColors: boolean): void {
-      const [width, height] = [texture.width, texture.height]
+  //#region Buffer Draw Method
+  protected writeTexture(texture: ImageData, seperateColors: boolean): void {
+    const [width, height] = [texture.width, texture.height]
 
-      const writer = seperateColors
-        ? (idx: number) =>
-            this.setPixelRGB(
-              idx,
-              this.random8bit(),
-              this.random8bit(),
-              this.random8bit(),
-            )
-        : (idx: number) => this.setPixelSoild(idx, this.random8bit())
+    const writer = seperateColors
+      ? (idx: number) =>
+          this.setPixelRGB(
+            idx,
+            this.random8bit(),
+            this.random8bit(),
+            this.random8bit(),
+          )
+      : (idx: number) => this.setPixelSoild(idx, this.random8bit())
 
-      for (let r = 0; r < height; r++) {
-        for (let c = 0; c < width; c++) {
-          writer(this.getIndex(r, c))
-        }
+    for (let r = 0; r < height; r++) {
+      for (let c = 0; c < width; c++) {
+        writer(this.getIndex(r, c))
       }
     }
-    //#endregion
-  },
-)
+  }
+  //#endregion
+}
+customElements.define("white-noise", HTMLWhiteNoiseElement)
 //#endregion
 
 //#region Gaussian Noise
-customElements.define(
-  "gaussian-noise",
-  class GaussianNoise extends NoiseCanvas {
-    //#region Private Variables
-    private static readonly VARIABLE_NAMES = {
-      INTENSITY: "intensity", // Defines how intense standard deviation values are consistered from the balancePoint
-      BALANCE_POINT: "balancePoint", // Defines the "middle" point, which standard deviation will offset from
-    } as const
-    //#endregion
+export class HTMLGaussianNoiseElement extends HTMLNoiseCanvasElement {
+  //#region Private Variables
+  private static readonly VARIABLE_NAMES = {
+    INTENSITY: "intensity", // Defines how intense standard deviation values are consistered from the balancePoint
+    BALANCE_POINT: "balance-point", // Defines the "middle" point, which standard deviation will offset from
+  } as const
+  //#endregion
 
-    //#region Attribute Methods
-    //        Returns needed attribute parameters
-    protected getParameterNames(): string[] {
-      return Object.values(GaussianNoise.VARIABLE_NAMES)
+  //#region Attribute Methods
+  //        Returns needed attribute parameters
+  protected override getParameterNames(): string[] {
+    return Object.values(HTMLGaussianNoiseElement.VARIABLE_NAMES)
+  }
+  //        Returns the default value of all needed attribute parameters
+  protected override getDefaultParameter(name: string) {
+    if (HTMLGaussianNoiseElement.VARIABLE_NAMES.INTENSITY === name) {
+      return 255
+    } else if (HTMLGaussianNoiseElement.VARIABLE_NAMES.BALANCE_POINT === name) {
+      return 128
     }
-    //        Returns the default value of all needed attribute parameters
-    protected getDefaultParameter(name: string) {
-      if (GaussianNoise.VARIABLE_NAMES.INTENSITY === name) {
-        return 255
-      } else if (GaussianNoise.VARIABLE_NAMES.BALANCE_POINT === name) {
-        return 128
-      }
-      return undefined
+    return undefined
+  }
+  //        Parses the attribute string with the expected value
+  protected override parseParameter(name: string, val: string): any {
+    if (HTMLGaussianNoiseElement.VARIABLE_NAMES.INTENSITY === name) {
+      return Number(val)
     }
-    //        Parses the attribute string with the expected value
-    protected parseParameter(name: string, val: string): any {
-      if (GaussianNoise.VARIABLE_NAMES.INTENSITY === name) {
-        return Number(val)
-      }
-      return val
-    }
+    return val
+  }
 
-    static get observedAttributes(): string[] {
-      return [
-        ...(super.observedAttributes || []),
-        ...Object.values(GaussianNoise.VARIABLE_NAMES),
-      ]
-    }
-    //#endregion
+  static get observedAttributes(): string[] {
+    return [
+      ...(super.observedAttributes || []),
+      ...Object.values(HTMLGaussianNoiseElement.VARIABLE_NAMES),
+    ]
+  }
+  //#endregion
 
-    //#region     Base Attribute Accessors
-    //#region         Setters
-    public setIntensity(val: number): void {
-      this.setParameter(GaussianNoise.VARIABLE_NAMES.INTENSITY, val)
-    }
-    //#endregion
+  //#region     Base Attribute Accessors
+  //#region         Setters
+  public setIntensity(val: number): void {
+    this.setParameter(HTMLGaussianNoiseElement.VARIABLE_NAMES.INTENSITY, val)
+  }
+  //#endregion
 
-    //#region         Getters
-    //      Gets the intensity parameter saved in valuesRecord
-    public getIntensity(): number {
-      return this.getValue(GaussianNoise.VARIABLE_NAMES.INTENSITY)
-    }
-    //#endregion
-    //#endregion
+  //#region         Getters
+  //      Gets the intensity parameter saved in valuesRecord
+  public getIntensity(): number {
+    return this.getValue(HTMLGaussianNoiseElement.VARIABLE_NAMES.INTENSITY)
+  }
+  //#endregion
+  //#endregion
 
-    //#region Buffer Draw Method
-    protected writeTexture(texture: ImageData, seperateColors: boolean): void {
-      const [width, height] = [texture.width, texture.height]
-      const intensityScale = Number(
-        this.getValue(GaussianNoise.VARIABLE_NAMES.INTENSITY),
+  //#region Buffer Draw Method
+  protected writeTexture(texture: ImageData, seperateColors: boolean): void {
+    const [width, height] = [texture.width, texture.height]
+    const intensityScale = Number(
+      this.getValue(HTMLGaussianNoiseElement.VARIABLE_NAMES.INTENSITY),
+    )
+    const balancePoint = Number(
+      this.getValue(HTMLGaussianNoiseElement.VARIABLE_NAMES.BALANCE_POINT),
+    )
+
+    const randomNumber = () =>
+      clamp(
+        ((this.standardNormal() * intensityScale) | 0) + balancePoint,
+        0,
+        255,
       )
-      const balancePoint = Number(
-        this.getValue(GaussianNoise.VARIABLE_NAMES.BALANCE_POINT),
-      )
+    const writer = seperateColors
+      ? (idx: number) =>
+          this.setPixelRGB(idx, randomNumber(), randomNumber(), randomNumber())
+      : (idx: number) => this.setPixelSoild(idx, randomNumber())
 
-      const randomNumber = () =>
-        clamp(
-          ((this.standardNormal() * intensityScale) | 0) + balancePoint,
-          0,
-          255,
-        )
-      const writer = seperateColors
-        ? (idx: number) =>
-            this.setPixelRGB(
-              idx,
-              randomNumber(),
-              randomNumber(),
-              randomNumber(),
-            )
-        : (idx: number) => this.setPixelSoild(idx, randomNumber())
-
-      for (let r = 0; r < height; r++) {
-        for (let c = 0; c < width; c++) {
-          writer(this.getIndex(r, c))
-        }
+    for (let r = height - 1; r >= 0; r--) {
+      for (let c = 0; c < width; c++) {
+        writer(this.getIndex(r, c))
       }
     }
-    //#endregion
+  }
+  //#endregion
 
-    //#region Helper Methods
-    //    Returns a random number based on Standard Normal Distribution (mean 0, stdev 1)
-    private standardNormal(): number {
-      let u = 0
-      let v = 0
+  //#region Helper Methods
+  //    Returns a random number based on Standard Normal Distribution (mean 0, stdev 1)
+  private standardNormal(): number {
+    let u = 0
+    let v = 0
 
-      while (u === 0) u = this.randomUFloat()
-      while (v === 0) v = this.randomUFloat()
+    while (u === 0) u = this.randomUFloat()
+    while (v === 0) v = this.randomUFloat()
 
-      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
-    }
-    //#endregion
-  },
-)
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
+  }
+  //#endregion
+}
+customElements.define("gaussian-noise", HTMLGaussianNoiseElement)
 //#endregion
 
 //#region Random Walk Noise
 //#region       Needed Types
-type RandomWalkNoiseSetPixelMethod = (
+type HTMLRandomWalkNoiseElementSetPixelMethod = (
   pInfo: [number, number],
   idx: number,
   memo: number[],
 ) => void
-type RandomWalkNoiseProcessPixelLocation = (
+type HTMLRandomWalkNoiseElementProcessPixelLocation = (
   idx: number,
   pInfo: [number, number],
 ) => [number, number]
-type RandomWalkNoiseProcessWalkDirection = (
+type HTMLRandomWalkNoiseElementProcessWalkDirection = (
   r: number,
   c: number,
   pInfo: [number, number],
-  processLocation: RandomWalkNoiseProcessPixelLocation,
+  processLocation: HTMLRandomWalkNoiseElementProcessPixelLocation,
 ) => [number, number]
 
-type RandomWalkNoiseShapeType =
+type HTMLRandomWalkNoiseElementShapeType =
   | "diagonal"
   | "revDiagonal"
   | "horizontal"
@@ -1189,289 +1241,307 @@ type RandomWalkNoiseShapeType =
 //#endregion
 
 //#region       Class Definition
-customElements.define(
-  "random-walk-noise",
-  class RandomWalkNoise extends NoiseCanvas {
-    //#region Private Variables
-    private static readonly VARIABLE_NAMES = {
-      SOURCE_COLUMN: "sc", // The starting column for texture generation
-      SOURCE_ROW: "sr", // The starting row for texture generation
-      INTENSITY: "intensity", // Defines how large each step in the walk can increase or decrease a pixel's value
-      BALANCE_POINT: "balancePoint", // Defines the "middle" point, which all pixel values will be pulled to
-      PULL: "pull", // A factor multiplied to every pixel's value, which pulls the value closer to it's balancePoint
-      SHAPE: "shape", // The type of random walk algorithm being used
-    } as const
-    //#endregion
+export class HTMLRandomWalkNoiseElement extends HTMLNoiseCanvasElement {
+  //#region Private Variables
+  private static readonly VARIABLE_NAMES = {
+    SOURCE_COLUMN: "sc", // The starting column for texture generation
+    SOURCE_ROW: "sr", // The starting row for texture generation
+    INTENSITY: "intensity", // Defines how large each step in the walk can increase or decrease a pixel's value
+    BALANCE_POINT: "balance-point", // Defines the "middle" point, which all pixel values will be pulled to
+    PULL: "pull", // A factor multiplied to every pixel's value, which pulls the value closer to it's balancePoint
+    SHAPE: "shape", // The type of random walk algorithm being used
+  } as const
+  //#endregion
 
-    //#region Attribute Methods
-    //        Returns needed attribute parameters
-    protected getParameterNames(): string[] {
-      return Object.values(RandomWalkNoise.VARIABLE_NAMES)
+  //#region Attribute Methods
+  //        Returns needed attribute parameters
+  protected override getParameterNames(): string[] {
+    return Object.values(HTMLRandomWalkNoiseElement.VARIABLE_NAMES)
+  }
+  //        Returns the default value of all needed attribute parameters
+  protected override getDefaultParameter(name: string) {
+    if (
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_COLUMN === name ||
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_ROW === name
+    ) {
+      return 0
+    } else if (HTMLRandomWalkNoiseElement.VARIABLE_NAMES.INTENSITY === name) {
+      return 10
+    } else if (
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.BALANCE_POINT === name
+    ) {
+      return 128
+    } else if (HTMLRandomWalkNoiseElement.VARIABLE_NAMES.PULL === name) {
+      return 0.99
+    } else if (HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SHAPE === name) {
+      return "spread"
     }
-    //        Returns the default value of all needed attribute parameters
-    protected getDefaultParameter(name: string) {
-      if (
-        RandomWalkNoise.VARIABLE_NAMES.SOURCE_COLUMN === name ||
-        RandomWalkNoise.VARIABLE_NAMES.SOURCE_ROW === name
-      ) {
-        return 0
-      } else if (RandomWalkNoise.VARIABLE_NAMES.INTENSITY === name) {
-        return 10
-      } else if (RandomWalkNoise.VARIABLE_NAMES.BALANCE_POINT === name) {
-        return 128
-      } else if (RandomWalkNoise.VARIABLE_NAMES.PULL === name) {
-        return 0.99
-      } else if (RandomWalkNoise.VARIABLE_NAMES.SHAPE === name) {
-        return "spread"
-      }
-      return undefined
-    }
-    //        Parses the attribute string with the expected value
-    protected parseParameter(name: string, val: string): any {
-      if (
-        RandomWalkNoise.VARIABLE_NAMES.SOURCE_COLUMN === name ||
-        RandomWalkNoise.VARIABLE_NAMES.SOURCE_ROW === name
-      ) {
-        return Number(val)
-      } else if (RandomWalkNoise.VARIABLE_NAMES.INTENSITY === name) {
-        return Number(val)
-      } else if (RandomWalkNoise.VARIABLE_NAMES.BALANCE_POINT === name) {
-        return Number(val)
-      } else if (RandomWalkNoise.VARIABLE_NAMES.PULL === name) {
-        return Number(val)
-      } else if (RandomWalkNoise.VARIABLE_NAMES.SHAPE === name) {
-        return val
-      }
+    return undefined
+  }
+  //        Parses the attribute string with the expected value
+  protected override parseParameter(name: string, val: string): any {
+    if (
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_COLUMN === name ||
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_ROW === name
+    ) {
+      return Number(val)
+    } else if (HTMLRandomWalkNoiseElement.VARIABLE_NAMES.INTENSITY === name) {
+      return Number(val)
+    } else if (
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.BALANCE_POINT === name
+    ) {
+      return Number(val)
+    } else if (HTMLRandomWalkNoiseElement.VARIABLE_NAMES.PULL === name) {
+      return Number(val)
+    } else if (HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SHAPE === name) {
       return val
     }
+    return val
+  }
 
-    static get observedAttributes(): string[] {
-      return [
-        ...(super.observedAttributes || []),
-        ...Object.values(RandomWalkNoise.VARIABLE_NAMES),
-      ]
-    }
-    //#endregion
+  static get observedAttributes(): string[] {
+    return [
+      ...(super.observedAttributes || []),
+      ...Object.values(HTMLRandomWalkNoiseElement.VARIABLE_NAMES),
+    ]
+  }
+  //#endregion
 
-    //#region     Base Attribute Accessors
-    //#region         Setters
-    //      Assuming this is not a value connected from an HTMLInputElement, this method
-    //      sets the source_column value, saved in NoiseCanvas.valuesRecord
-    public setSourceColumn(val: number): void {
-      this.setParameter(RandomWalkNoise.VARIABLE_NAMES.SOURCE_COLUMN, val)
-    }
-    //      Assuming this is not a value connected from an HTMLInputElement, this method
-    //      sets the source_row value, saved in NoiseCanvas.valuesRecord
-    public setSourceRow(val: number): void {
-      this.setParameter(RandomWalkNoise.VARIABLE_NAMES.SOURCE_ROW, val)
-    }
+  //#region     Base Attribute Accessors
+  //#region         Setters
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the source_column value, saved in HTMLNoiseCanvasElement.valuesRecord
+  public setSourceColumn(val: number): void {
+    this.setParameter(
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_COLUMN,
+      val,
+    )
+  }
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the source_row value, saved in HTMLNoiseCanvasElement.valuesRecord
+  public setSourceRow(val: number): void {
+    this.setParameter(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_ROW, val)
+  }
 
-    //      Assuming this is not a value connected from an HTMLInputElement, this method
-    //      sets the intensity value, saved in NoiseCanvas.valuesRecord
-    public setIntensity(val: number): void {
-      this.setParameter(RandomWalkNoise.VARIABLE_NAMES.INTENSITY, val)
-    }
-    //      Assuming this is not a value connected from an HTMLInputElement, this method
-    //      sets the balance_point value, saved in NoiseCanvas.valuesRecord
-    public setBalancePoint(val: number): void {
-      this.setParameter(RandomWalkNoise.VARIABLE_NAMES.BALANCE_POINT, val)
-    }
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the intensity value, saved in HTMLNoiseCanvasElement.valuesRecord
+  public setIntensity(val: number): void {
+    this.setParameter(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.INTENSITY, val)
+  }
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the balance_point value, saved in HTMLNoiseCanvasElement.valuesRecord
+  public setBalancePoint(val: number): void {
+    this.setParameter(
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.BALANCE_POINT,
+      val,
+    )
+  }
 
-    //      Assuming this is not a value connected from an HTMLInputElement, this method
-    //      sets the pull value, saved in NoiseCanvas.valuesRecord
-    public setPull(val: number): void {
-      this.setParameter(RandomWalkNoise.VARIABLE_NAMES.PULL, val)
-    }
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the pull value, saved in HTMLNoiseCanvasElement.valuesRecord
+  public setPull(val: number): void {
+    this.setParameter(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.PULL, val)
+  }
 
-    //      Assuming this is not a value connected from an HTMLInputElement, this method
-    //      sets the shape value, saved in NoiseCanvas.valuesRecord
-    public setShape(val: RandomWalkNoiseShapeType): void {
-      this.setParameter(RandomWalkNoise.VARIABLE_NAMES.SHAPE, val)
-    }
-    //#endregion
+  //      Assuming this is not a value connected from an HTMLInputElement, this method
+  //      sets the shape value, saved in HTMLNoiseCanvasElement.valuesRecord
+  public setShape(val: HTMLRandomWalkNoiseElementShapeType): void {
+    this.setParameter(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SHAPE, val)
+  }
+  //#endregion
 
-    //#region         Getters
-    //      Gets the source_column parameter saved in valuesRecord
-    public getSourceColumn(): number {
-      return this.getValue(RandomWalkNoise.VARIABLE_NAMES.SOURCE_COLUMN)
-    }
-    //      Gets the source_row parameter saved in valuesRecord
-    public getSourceRow(): number {
-      return this.getValue(RandomWalkNoise.VARIABLE_NAMES.SOURCE_ROW)
-    }
+  //#region         Getters
+  //      Gets the source_column parameter saved in valuesRecord
+  public getSourceColumn(): number {
+    return this.getValue(
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_COLUMN,
+    )
+  }
+  //      Gets the source_row parameter saved in valuesRecord
+  public getSourceRow(): number {
+    return this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_ROW)
+  }
 
-    //      Gets the intensity parameter saved in valuesRecord
-    public getIntensity(): number {
-      return this.getValue(RandomWalkNoise.VARIABLE_NAMES.INTENSITY)
-    }
-    //      Gets the balence_point parameter saved in valuesRecord
-    public getBalancePoint(): number {
-      return this.getValue(RandomWalkNoise.VARIABLE_NAMES.BALANCE_POINT)
-    }
+  //      Gets the intensity parameter saved in valuesRecord
+  public getIntensity(): number {
+    return this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.INTENSITY)
+  }
+  //      Gets the balence_point parameter saved in valuesRecord
+  public getBalancePoint(): number {
+    return this.getValue(
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.BALANCE_POINT,
+    )
+  }
 
-    //      Gets the shape pull saved in valuesRecord
-    public getPull(): number {
-      return this.getValue(RandomWalkNoise.VARIABLE_NAMES.PULL)
-    }
+  //      Gets the shape pull saved in valuesRecord
+  public getPull(): number {
+    return this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.PULL)
+  }
 
-    //      Gets the shape parameter saved in valuesRecord
-    public getShape(): RandomWalkNoiseShapeType {
-      return this.getValue(RandomWalkNoise.VARIABLE_NAMES.SHAPE)
-    }
-    //#endregion
-    //#endregion
+  //      Gets the shape parameter saved in valuesRecord
+  public getShape(): HTMLRandomWalkNoiseElementShapeType {
+    return this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SHAPE)
+  }
+  //#endregion
+  //#endregion
 
-    //#region Buffer Draw Method
-    protected writeTexture(texture: ImageData, seperateColors: boolean): void {
-      const [width, height] = [texture.width, texture.height]
+  //#region Buffer Draw Method
+  protected writeTexture(texture: ImageData, seperateColors: boolean): void {
+    const [width, height] = [texture.width, texture.height]
 
-      const sc = clamp(
-        Number(this.getValue(RandomWalkNoise.VARIABLE_NAMES.SOURCE_COLUMN)),
-        0,
-        width,
+    const sc = clamp(
+      Number(
+        this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_COLUMN),
+      ),
+      0,
+      width,
+    )
+    const sr = clamp(
+      Number(
+        this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SOURCE_ROW),
+      ),
+      0,
+      height,
+    )
+    const sIdx = this.getIndex(sr, sc)
+    const intensityScale = Number(
+      this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.INTENSITY),
+    )
+    const balancePoint = Number(
+      this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.BALANCE_POINT),
+    )
+    const pull = Number(
+      this.getValue(HTMLRandomWalkNoiseElement.VARIABLE_NAMES.PULL),
+    )
+    const shape = this.getValue(
+      HTMLRandomWalkNoiseElement.VARIABLE_NAMES.SHAPE,
+    ) as HTMLRandomWalkNoiseElementShapeType
+
+    //      A lambda used to set the current pixel with the correct random value, according to it's neighbors.
+    //      Defined here to keep all relevant parameters in local scope.
+    const setWalkPixel: HTMLRandomWalkNoiseElementSetPixelMethod = (
+      pInfo: [number, number],
+      idx: number,
+      memo: number[],
+    ): void => {
+      const value = clamp(
+        (pInfo[1] === 0
+          ? this.random8bit() - balancePoint
+          : pInfo[0] / pInfo[1]) *
+          pull +
+          Math.sign(this.randomFloat()) * intensityScale,
+        -balancePoint,
+        255 - balancePoint,
       )
-      const sr = clamp(
-        Number(this.getValue(RandomWalkNoise.VARIABLE_NAMES.SOURCE_ROW)),
-        0,
-        height,
-      )
-      const sIdx = this.getIndex(sr, sc)
-      const intensityScale = Number(
-        this.getValue(RandomWalkNoise.VARIABLE_NAMES.INTENSITY),
-      )
-      const balancePoint = Number(
-        this.getValue(RandomWalkNoise.VARIABLE_NAMES.BALANCE_POINT),
-      )
-      const pull = Number(this.getValue(RandomWalkNoise.VARIABLE_NAMES.PULL))
-      const shape = this.getValue(
-        RandomWalkNoise.VARIABLE_NAMES.SHAPE,
-      ) as RandomWalkNoiseShapeType
+      memo[idx] = value
+      this.setPixelSoild(idx, (value + balancePoint) | 0)
+    }
 
-      //      A lambda used to set the current pixel with the correct random value, according to it's neighbors.
-      //      Defined here to keep all relevant parameters in local scope.
-      const setWalkPixel: RandomWalkNoiseSetPixelMethod = (
-        pInfo: [number, number],
-        idx: number,
-        memo: number[],
-      ): void => {
-        const value = clamp(
-          (pInfo[1] === 0
-            ? this.random8bit() - balancePoint
-            : pInfo[0] / pInfo[1]) *
-            pull +
-            Math.sign(this.randomFloat()) * intensityScale,
-          -balancePoint,
-          255 - balancePoint,
-        )
-        memo[idx] = value
-        this.setPixelSoild(idx, (value + balancePoint) | 0)
+    switch (shape) {
+      case "diagonal":
+        break
+      case "revDiagonal":
+        break
+      case "horizontal":
+        break
+      case "vertical":
+        break
+      case "spiral":
+        break
+      case "revSpiral":
+        break
+      case "spread":
+      default:
+        this.walkSpread(width, height, sIdx, setWalkPixel)
+    }
+  }
+  //#endregion
+
+  //#region Buffer Shape Draw Methods
+  // A template method used to make defining random walk algorithms easy
+  private walkTemplate(
+    width: number,
+    height: number,
+    sIdx: number,
+    setWalkPixel: HTMLRandomWalkNoiseElementSetPixelMethod,
+    processWalkDirection: HTMLRandomWalkNoiseElementProcessWalkDirection,
+  ): void {
+    const memo: number[] = Array(width * height).fill(0)
+    this.fill(0, 0)
+
+    let open: number[] = [sIdx]
+    let closed: number[] = []
+
+    const processPixelLocation = (
+      idx: number,
+      pInfo: [number, number],
+    ): [number, number] => {
+      const alpha = this.getPixelAlpha(idx)
+      if (alpha > 0) {
+        pInfo[0] += memo[idx]
+        pInfo[1] += 1
+      } else {
+        open.push(idx)
       }
+      return pInfo
+    }
 
-      switch (shape) {
-        case "diagonal":
-          break
-        case "revDiagonal":
-          break
-        case "horizontal":
-          break
-        case "vertical":
-          break
-        case "spiral":
-          break
-        case "revSpiral":
-          break
-        case "spread":
-        default:
-          this.walkSpread(width, height, sIdx, setWalkPixel)
+    while (open.length > 0) {
+      closed = open
+      open = []
+
+      while (closed.length > 0) {
+        const currentIdx = closed.pop()!
+        const [r, c] = [Math.floor(currentIdx / width), currentIdx % width]
+
+        let pInfo: [number, number] = [0, 0]
+
+        if (this.getPixelAlpha(currentIdx) > 0) continue
+        processWalkDirection(r, c, pInfo, processPixelLocation)
+        setWalkPixel(pInfo, currentIdx, memo)
       }
     }
-    //#endregion
+  }
 
-    //#region Buffer Shape Draw Methods
-    // A template method used to make defining random walk algorithms easy
-    private walkTemplate(
-      width: number,
-      height: number,
-      sIdx: number,
-      setWalkPixel: RandomWalkNoiseSetPixelMethod,
-      processWalkDirection: RandomWalkNoiseProcessWalkDirection,
-    ): void {
-      const memo: number[] = Array(width * height).fill(0)
-      this.fill(0, 0)
-
-      let open: number[] = [sIdx]
-      let closed: number[] = []
-
-      const processPixelLocation = (
-        idx: number,
+  // Defines a random walk algorithm that spreads outwards, in all directions, equally
+  private walkSpread(
+    width: number,
+    height: number,
+    sIdx: number,
+    setWalkPixel: HTMLRandomWalkNoiseElementSetPixelMethod,
+  ): void {
+    this.walkTemplate(
+      width,
+      height,
+      sIdx,
+      setWalkPixel,
+      (
+        r: number,
+        c: number,
         pInfo: [number, number],
+        processPixelLocation: HTMLRandomWalkNoiseElementProcessPixelLocation,
       ): [number, number] => {
-        const alpha = this.getPixelAlpha(idx)
-        if (alpha > 0) {
-          pInfo[0] += memo[idx]
-          pInfo[1] += 1
-        } else {
-          open.push(idx)
+        if (r > 0) {
+          pInfo = processPixelLocation(this.getIndex(r - 1, c), pInfo)
         }
+        if (c > 0) {
+          pInfo = processPixelLocation(this.getIndex(r, c - 1), pInfo)
+        }
+
+        if (r < height - 1) {
+          pInfo = processPixelLocation(this.getIndex(r + 1, c), pInfo)
+        }
+        if (c < width - 1) {
+          pInfo = processPixelLocation(this.getIndex(r, c + 1), pInfo)
+        }
+
         return pInfo
-      }
-
-      while (open.length > 0) {
-        closed = open
-        open = []
-
-        while (closed.length > 0) {
-          const currentIdx = closed.pop()!
-          const [r, c] = [Math.floor(currentIdx / width), currentIdx % width]
-
-          let pInfo: [number, number] = [0, 0]
-
-          if (this.getPixelAlpha(currentIdx) > 0) continue
-          processWalkDirection(r, c, pInfo, processPixelLocation)
-          setWalkPixel(pInfo, currentIdx, memo)
-        }
-      }
-    }
-
-    // Defines a random walk algorithm that spreads outwards, in all directions, equally
-    private walkSpread(
-      width: number,
-      height: number,
-      sIdx: number,
-      setWalkPixel: RandomWalkNoiseSetPixelMethod,
-    ): void {
-      this.walkTemplate(
-        width,
-        height,
-        sIdx,
-        setWalkPixel,
-        (
-          r: number,
-          c: number,
-          pInfo: [number, number],
-          processPixelLocation: RandomWalkNoiseProcessPixelLocation,
-        ): [number, number] => {
-          if (r > 0) {
-            pInfo = processPixelLocation(this.getIndex(r - 1, c), pInfo)
-          }
-          if (c > 0) {
-            pInfo = processPixelLocation(this.getIndex(r, c - 1), pInfo)
-          }
-
-          if (r < height - 1) {
-            pInfo = processPixelLocation(this.getIndex(r + 1, c), pInfo)
-          }
-          if (c < width - 1) {
-            pInfo = processPixelLocation(this.getIndex(r, c + 1), pInfo)
-          }
-
-          return pInfo
-        },
-      )
-    }
-    //#endregion
-  },
-)
+      },
+    )
+  }
+  //#endregion
+}
+customElements.define("random-walk-noise", HTMLRandomWalkNoiseElement)
 //#endregion
 //#endregion
 
