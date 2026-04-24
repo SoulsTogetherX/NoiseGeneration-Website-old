@@ -201,7 +201,7 @@ a:visited {
     margin: 4rem 0;
     margin-right: var(--sidebar-width);
 
-    max-width: max(60vw, 20rem);
+    max-width: max(40vw, 20rem);
 
     align-content: center;
     text-align: left;

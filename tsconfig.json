@@ -4,7 +4,7 @@
     "target": "ES6",
     "jsx": "preserve",
     "lib": ["es2017", "dom"],
-    "rootDir": "./src",
-    "outDir": "./dist"
+    "rootDir": "ts",
+    "outDir": "static/js"
   }
 }

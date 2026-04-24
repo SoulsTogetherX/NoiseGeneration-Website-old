@@ -1,17 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" charset="utf-8">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <meta name="keywords" content="" />
-    <meta name="author" content="Xavier Alvarez" />
-    <meta property="og:title" content="2D Noise Generator Showcase" />
-    <meta property="og:description" content="" />
+
     <meta property="og:image" content="" />
-    <meta property="og:url" content="" />
     <meta property="og:type" content="website" />
-    <title>2D Noise Generator Showcase</title>
+
+    <meta name="keywords" content="{{ .Site.Params.keywords }}" />
+    <meta name="author" content="{{ .Site.Params.author }}" />
+    <meta property="og:description" content="{{ .Site.Params.description }}" />
+
+    <meta property="og:url" content="{{ .Permalink }}" />
+    <meta property="og:title" content="{{ .Site.Title }}" />
+    <title>{{ .Site.Title }}</title>
 
     <!-- FONT -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -22,15 +25,16 @@
     />
 
     <!-- CSS -->
-    <link rel="stylesheet" href="../assets/css/styles.css" />
+    <link rel="stylesheet" href="../css/styles.css" />
 
     <!-- Scripts -->
-    <script type="module" src="../dist/helperMethods.js"></script>
-    <script type="module" src="../dist/noiseCanvasComponenets.js"></script>
-    <script type="module" src="../dist/homeBG.js"></script>
-    <script type="module" src="../dist/generalFunctionality.js"></script>
-    <script type="module" src="../dist/navMenu.js"></script>
+    <script type="module" src="../js/helperMethods.js"></script>
+    <script type="module" src="../js/noiseCanvasComponenets.js"></script>
+    <script type="module" src="../js/homeBG.js"></script>
+    <script type="module" src="../js/generalFunctionality.js"></script>
+    <script type="module" src="../js/navMenu.js"></script>
   </head>
+
   <body class="flex-row">
     <button id="nav-button">
       <div></div>
@@ -62,34 +66,7 @@
       </ul>
     </nav>
     <div id="content-wrapper">
-      <div id="home-bg">
-        <white-noise
-          resolution="1000"
-          useProgress="true"
-          disableUpdates="true"
-          class="home-noise-bg"
-        ></white-noise>
-        <gaussian-noise
-          resolution="1000"
-          useProgress="true"
-          disableUpdates="true"
-          class="home-noise-bg"
-        ></gaussian-noise>
-        <random-walk-noise
-          resolution="500"
-          useProgress="true"
-          disableUpdates="true"
-          class="home-noise-bg"
-        ></random-walk-noise>
-      </div>
-      <div class="content-body">
-        <header id="home-header" class="flex-col max-expand">
-          <h1>
-            <p>Glossary.</p>
-          </h1>
-        </header>
-      </div>
-      <footer></footer>
+      {{ block "main" . }} {{ end }}
       <div id="sidebar">
         <a
           href="https://github.com/SoulsTogetherX"
