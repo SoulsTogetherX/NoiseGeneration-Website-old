@@ -49,6 +49,11 @@ a {
 a:visited {
   color: var(--seconary-accent);
 }
+
+main {
+  width: 100%;
+  height: 100%;
+}
 /*#endregion*/
 
 /*#region Helper Styles */
@@ -68,16 +73,38 @@ a:visited {
 /*#endregion*/
 
 /*#region Transition */
-@view-transition {
-  navigation: auto;
-}
+
 /*#endregion*/
 
 /*#region Nav Bar */
+#nav-button {
+  display: none;
+}
+
+#nav-button-icon {
+  cursor: pointer;
+  display: none;
+  z-index: 2;
+
+  background-color: transparent;
+}
+#nav-button:checked ~ #nav-button-icon {
+  :first-child {
+    top: 40%;
+    transform: rotate(-45deg);
+  }
+  :nth-child(2) {
+    opacity: 0;
+  }
+  :last-child {
+    top: 40%;
+    transform: rotate(45deg);
+  }
+}
+
 #nav-menu {
   display: block;
   position: fixed;
-
   z-index: 1;
 
   padding: 1rem 0.5rem;
@@ -90,7 +117,10 @@ a:visited {
   transition: ease 0.5s;
 
   .nav-ul {
-    align-items: center;
+    display: flex;
+    flex-direction: column;
+
+    height: 100%;
 
     li {
       list-style-type: none;
@@ -99,76 +129,77 @@ a:visited {
       cursor: pointer;
 
       margin: 0.5rem 0rem;
+
+      a {
+        color: #000;
+      }
+      a:visited {
+        color: #000;
+      }
+    }
+    :last-child {
+      margin-top: auto;
     }
   }
 }
-.mobile #nav-menu {
-  transform: translateX(calc(var(--nav-width) * -1));
-}
-.mobile #nav-menu.active {
-  transform: translateX(0);
-}
 
-#nav-button {
-  cursor: pointer;
-  display: none;
-  z-index: 2;
-
-  background-color: transparent;
-}
-
-.mobile #nav-button {
-  --bar-height: 0.35rem;
-
-  display: block;
+#nav-overlay {
   position: fixed;
-
-  top: 0;
-  left: 0;
-
-  height: 2rem;
-  width: 2rem;
-
-  div {
-    display: block;
-    position: absolute;
-
-    left: 10%;
-    top: 50%;
-
-    height: var(--bar-height);
-    width: 80%;
-
-    transform: rotate(0deg);
-
-    border-radius: 10px;
-    background-color: #000;
-  }
-
-  :first-child {
-    top: calc(25% - var(--bar-height) * 0.5);
-    transition: ease 0.3s;
-  }
-  :nth-child(2) {
-    top: calc(50% - var(--bar-height) * 0.5);
-    transition: ease 0.3s;
-  }
-  :last-child {
-    top: calc(75% - var(--bar-height) * 0.5);
-    transition: ease 0.3s;
-  }
 }
-#nav-button.active {
-  :first-child {
-    top: 40%;
-    transform: rotate(-45deg);
+#nav-button:checked ~ #nav-overlay {
+  display: block;
+  inset: 0;
+  left: var(--nav-width);
+}
+
+@media (max-width: 48em) {
+  #nav-button-icon {
+    --bar-height: 0.35rem;
+
+    display: block;
+    position: fixed;
+
+    top: 0;
+    left: 0;
+
+    height: 2rem;
+    width: 2rem;
+
+    div {
+      display: block;
+      position: absolute;
+
+      left: 10%;
+      top: 50%;
+
+      height: var(--bar-height);
+      width: 80%;
+
+      transform: rotate(0deg);
+
+      border-radius: 10px;
+      background-color: #000;
+    }
+
+    :first-child {
+      top: calc(25% - var(--bar-height) * 0.5);
+      transition: ease 0.3s;
+    }
+    :nth-child(2) {
+      top: calc(50% - var(--bar-height) * 0.5);
+      transition: ease 0.3s;
+    }
+    :last-child {
+      top: calc(75% - var(--bar-height) * 0.5);
+      transition: ease 0.3s;
+    }
   }
-  :nth-child(2) {
-    opacity: 0;
+
+  #nav-menu {
+    transform: translateX(calc(var(--nav-width) * -1));
   }
-  :last-child {
-    top: 40%;
-    transform: rotate(45deg);
+  #nav-button:checked ~ #nav-menu {
+    transform: translateX(0);
   }
 }
 /*#endregion*/
@@ -201,7 +232,7 @@ a:visited {
     margin: 4rem 0;
     margin-right: var(--sidebar-width);
 
-    max-width: max(40vw, 20rem);
+    max-width: clamp(20rem, 60vw, 45rem);
 
     align-content: center;
     text-align: left;
@@ -229,13 +260,16 @@ a:visited {
     color: #fff;
   }
 }
-.mobile #home-header {
-  h1 {
-    font-size: 4rem;
-  }
-  div {
-    line-height: 1.5rem;
-    font-size: 0.8rem;
+
+@media (max-width: 48em) {
+  #home-header {
+    h1 {
+      font-size: 4rem;
+    }
+    div {
+      line-height: 1.5rem;
+      font-size: 0.8rem;
+    }
   }
 }
 /*#endregion*/
@@ -275,8 +309,8 @@ a:visited {
 #content-wrapper {
   position: relative;
   display: block;
-  overflow: hidden;
   isolation: isolate;
+  overflow: hidden;
 
   margin-left: var(--nav-width);
 
@@ -295,8 +329,9 @@ a:visited {
     text-align: center;
   }
 }
-.mobile #content-wrapper {
-  margin-left: 0;
+@media (max-width: 48em) {
+  #content-wrapper {
+    margin-left: 0;
+  }
 }
-
 /*#endregion*/

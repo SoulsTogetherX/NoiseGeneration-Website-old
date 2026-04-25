@@ -1,0 +1,29 @@
+<input type="checkbox" id="nav-button" />
+<label for="nav-button" id="nav-button-icon">
+  <div></div>
+  <div></div>
+  <div></div>
+</label>
+<nav id="nav-menu" aria-label="Main">
+  <ul class="nav-ul">
+    {{ $currentPage := . }}
+    {{ range .Site.Menus.main }}
+      {{ $isCurrentPage := false }}
+      {{ if eq .URL "/" }}
+        {{ $isCurrentPage = eq $currentPage.RelPermalink "/" }}
+      {{ else }}
+        {{ $isCurrentPage = or (eq $currentPage.RelPermalink .URL) (hasPrefix $currentPage.RelPermalink .URL) }}
+      {{ end }}
+
+
+      <li>
+        {{ if $isCurrentPage }}
+          <span aria-current="page">{{ .Name }}</span>
+        {{ else }}
+          <a href="{{ .URL }}">{{ .Name }}</a>
+        {{ end }}
+      </li>
+    {{ end }}
+  </ul>
+</nav>
+<label for="nav-button" id="nav-overlay" aria-hidden="true"></label>

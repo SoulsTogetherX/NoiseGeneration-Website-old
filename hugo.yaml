@@ -1,0 +1,21 @@
+baseURL: "https://example.org/"
+locale: "en-us"
+title: "2D Noise Generator Showcase"
+disableKinds: ["taxonomy", "term"]
+
+params:
+  description: "A site about 2D noise textures"
+  author: "Xavier Alvarez"
+  keywords: ""
+
+menu:
+  main:
+    - name: "Home"
+      url: "/"
+      weight: 10
+    - name: "About"
+      url: "/about"
+      weight: 20
+    - name: "Glossary"
+      url: "/glossary"
+      weight: 90

@@ -1,7 +1,15 @@
-#.vscode
+### .vscode ###
 */.vscode
 
-#typescript
+# prettify
+.prettierrc.json
+
+# npm
+/node_modules/
+/package-lock.json
+/package.json
+
+### Typescript ###
 /static/js/
 
 ### Hugo ###

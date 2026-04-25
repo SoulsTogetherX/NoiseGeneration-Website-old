@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en" charset="utf-8">
+  {{ partial "head" }}
+
+
+  <body class="flex-row">
+    {{ partial "navbar" . }}
+    <div id="content-wrapper">
+      <main>{{ block "main" . }}{{ end }}</main>
+      {{ partial "sidebar" }}
+    </div>
+  </body>
+</html>
