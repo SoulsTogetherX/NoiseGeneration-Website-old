@@ -81,46 +81,23 @@ main {
   display: none;
 }
 
-#nav-button-icon {
-  cursor: pointer;
-  display: none;
-  z-index: 2;
-
-  background-color: transparent;
-}
-#nav-button:checked ~ #nav-button-icon {
-  :first-child {
-    top: 40%;
-    transform: rotate(-45deg);
-  }
-  :nth-child(2) {
-    opacity: 0;
-  }
-  :last-child {
-    top: 40%;
-    transform: rotate(45deg);
-  }
-}
-
 #nav-menu {
   display: block;
   position: fixed;
-  z-index: 1;
-
-  padding: 1rem 0.5rem;
+  z-index: 10;
 
   width: var(--nav-width);
   height: 100%;
 
   background-color: var(--nav-bg);
 
-  transition: ease 0.5s;
-
-  .nav-ul {
+  ul {
     display: flex;
     flex-direction: column;
 
     height: 100%;
+
+    padding: 1rem 2rem;
 
     li {
       list-style-type: none;
@@ -129,13 +106,6 @@ main {
       cursor: pointer;
 
       margin: 0.5rem 0rem;
-
-      a {
-        color: #000;
-      }
-      a:visited {
-        color: #000;
-      }
     }
     :last-child {
       margin-top: auto;
@@ -143,20 +113,13 @@ main {
   }
 }
 
-#nav-overlay {
-  position: fixed;
-}
-#nav-button:checked ~ #nav-overlay {
-  display: block;
-  inset: 0;
-  left: var(--nav-width);
-}
-
 @media (max-width: 48em) {
   #nav-button-icon {
     --bar-height: 0.35rem;
 
     display: block;
+    cursor: pointer;
+    z-index: 11;
     position: fixed;
 
     top: 0;
@@ -164,6 +127,8 @@ main {
 
     height: 2rem;
     width: 2rem;
+
+    background-color: transparent;
 
     div {
       display: block;
@@ -175,31 +140,62 @@ main {
       height: var(--bar-height);
       width: 80%;
 
-      transform: rotate(0deg);
-
       border-radius: 10px;
       background-color: #000;
+
+      transform: rotate(0deg);
+      transition: ease 0.3s;
+      will-change: transform;
     }
 
     :first-child {
       top: calc(25% - var(--bar-height) * 0.5);
-      transition: ease 0.3s;
     }
     :nth-child(2) {
       top: calc(50% - var(--bar-height) * 0.5);
-      transition: ease 0.3s;
     }
     :last-child {
       top: calc(75% - var(--bar-height) * 0.5);
-      transition: ease 0.3s;
     }
   }
 
   #nav-menu {
+    transition: ease 0.5s;
     transform: translateX(calc(var(--nav-width) * -1));
+    will-change: transform;
+  }
+  #nav-overlay {
+    position: fixed;
+    z-index: 9;
+  }
+
+  #nav-button:checked ~ #nav-button-icon {
+    :first-child {
+      top: 40%;
+      transform: rotate(-45deg);
+    }
+    :nth-child(2) {
+      opacity: 0;
+    }
+    :last-child {
+      top: 40%;
+      transform: rotate(45deg);
+    }
   }
   #nav-button:checked ~ #nav-menu {
     transform: translateX(0);
+  }
+  #nav-button:checked ~ #nav-overlay {
+    display: block;
+    inset: 0;
+    left: var(--nav-width);
+  }
+
+  html[data-page-ready="0"] {
+    #nav-button-icon > *,
+    #nav-menu {
+      transition: none !important;
+    }
   }
 }
 /*#endregion*/

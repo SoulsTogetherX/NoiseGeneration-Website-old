@@ -3,7 +3,8 @@
   "compilerOptions": {
     "target": "ES6",
     "jsx": "preserve",
-    "lib": ["es2017", "dom"],
+    "lib": ["es2017", "dom.Iterable", "dom"],
+    "module": "es2020",
     "rootDir": "ts",
     "outDir": "static/js"
   }

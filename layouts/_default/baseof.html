@@ -9,5 +9,13 @@
       <main>{{ block "main" . }}{{ end }}</main>
       {{ partial "sidebar" }}
     </div>
+
+    <div id="transition-cover" aria-hidden="true">
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+
+    <script type="module" src="/js/pageTransitions.js"></script>
   </body>
 </html>

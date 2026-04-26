@@ -1,68 +1,101 @@
-import { HTMLNoiseCanvasElement } from "./noiseCanvasComponenets.js"
+import { HTMLNoiseCanvasElement } from "./noiseCanvasComponenets.js";
 
 //#region Constants
-const HOME_BG_ID = "home-bg"
-const HOME_BG_CHILD_CLASS = "home-noise-bg"
+const HOME_BG_ID = "home-bg";
+const HOME_BG_CHILD_CLASS = "home-noise-bg";
 
-const DEFAULT_OPACITY = 0.2
+const DEFAULT_OPACITY = 0.2;
 //#endregion
 
-//#region Quering
-const HOME_BG_CONTAINER = document.getElementById(HOME_BG_ID)
-const NOISE_CANVAS_BGS: HTMLNoiseCanvasElement[] =
-  (HOME_BG_CONTAINER?.getElementsByClassName(HOME_BG_CHILD_CLASS) ??
-    []) as HTMLNoiseCanvasElement[]
-//#endregion
+//#region BG Animations
+export function startHomeBG(): () => void {
+  //#region Document Query
+  const HOME_BG_CONTAINER = document.getElementById(HOME_BG_ID);
+  if (!HOME_BG_CONTAINER) {
+    return () => {};
+  }
 
-//#region Random Pick
-let pickRandomNoConsecutiveLastIndex: number = -1
-export function pickRandomNoConsecutive(): HTMLNoiseCanvasElement {
-  if (NOISE_CANVAS_BGS.length <= 1) return NOISE_CANVAS_BGS[0]
+  const NOISE_CANVASES = Array.from(
+    HOME_BG_CONTAINER.getElementsByClassName(HOME_BG_CHILD_CLASS),
+  ) as HTMLNoiseCanvasElement[];
+  //#endregion
 
-  let newIndex: number
-  do {
-    // Standard Math.random calculation for array index
-    newIndex = Math.floor(Math.random() * NOISE_CANVAS_BGS.length)
-  } while (newIndex === pickRandomNoConsecutiveLastIndex)
+  //#region Public Variables
+  let rafId = 0;
+  let timeoutId: number | undefined;
+  let stopped = false;
+  let currentNoise: HTMLNoiseCanvasElement | undefined;
+  let lastPickedIndex: number = -1;
+  //#endregion
 
-  pickRandomNoConsecutiveLastIndex = newIndex
-  return NOISE_CANVAS_BGS[newIndex]
-}
-//#endregion
+  //#region Method Definitions
+  function pickRandomNoConsecutive(): HTMLNoiseCanvasElement {
+    if (NOISE_CANVASES.length <= 1) return NOISE_CANVASES[0];
 
-//#region Main Animation
-function startRandomNoise(): void {
-  const randomNoise = pickRandomNoConsecutive()
+    let newIndex: number;
+    do {
+      newIndex = Math.floor(Math.random() * NOISE_CANVASES.length);
+    } while (newIndex === lastPickedIndex);
 
-  randomNoise.progressRatio = 0.0
-  randomNoise.disableUpdates = false
-  randomNoise.style.opacity = DEFAULT_OPACITY.toString()
+    lastPickedIndex = newIndex;
+    return NOISE_CANVASES[newIndex];
+  }
 
-  const progressNoiseFrame = () => {
-    randomNoise.progressRatio += 0.0025
-
-    if (randomNoise.progressRatio >= 1.0) {
-      setTimeout(opacityNoiseFrame, 1000)
-      return
+  const cleanup = (): void => {
+    stopped = true;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
     }
-    requestAnimationFrame(progressNoiseFrame)
-  }
-  const opacityNoiseFrame = async () => {
-    const animation = randomNoise.animate(
-      [{ opacity: DEFAULT_OPACITY }, { opacity: 0.0 }],
-      {
-        duration: 1000,
-        fill: "none",
-      },
-    )
-    await animation.finished
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+    if (currentNoise) {
+      currentNoise.disableUpdates = true;
+    }
+  };
 
-    randomNoise.style.opacity = "0.0"
-    setTimeout(startRandomNoise, 500)
-  }
+  const startRandomNoise = (): void => {
+    if (stopped) return;
 
-  requestAnimationFrame(progressNoiseFrame)
+    currentNoise = pickRandomNoConsecutive();
+    if (!currentNoise) return;
+
+    currentNoise.progressRatio = 0.0;
+    currentNoise.disableUpdates = false;
+    currentNoise.style.opacity = DEFAULT_OPACITY.toString();
+
+    const progressNoiseFrame = (): void => {
+      if (stopped || !currentNoise) return;
+
+      currentNoise.progressRatio += 0.0025;
+
+      if (currentNoise.progressRatio >= 1.0) {
+        timeoutId = window.setTimeout(() => {
+          if (!stopped) {
+            const animation = currentNoise!.animate(
+              [{ opacity: DEFAULT_OPACITY }, { opacity: 0.0 }],
+              { duration: 1000, fill: "none" },
+            );
+
+            animation.finished.then(() => {
+              if (stopped) return;
+              currentNoise!.style.opacity = "0.0";
+              timeoutId = window.setTimeout(startRandomNoise, 500);
+            });
+          }
+        }, 1000);
+
+        return;
+      }
+
+      rafId = requestAnimationFrame(progressNoiseFrame);
+    };
+
+    rafId = requestAnimationFrame(progressNoiseFrame);
+  };
+  //#endregion
+
+  startRandomNoise();
+  return cleanup;
 }
-
-startRandomNoise()
 //#endregion
