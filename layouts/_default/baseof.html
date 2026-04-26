@@ -7,13 +7,14 @@
     {{ partial "navbar" . }}
     <div id="content-wrapper">
       <main>{{ block "main" . }}{{ end }}</main>
-      {{ partial "sidebar" }}
-    </div>
 
-    <div id="transition-cover" aria-hidden="true">
-      <div></div>
-      <div></div>
-      <div></div>
+      <div id="transition-cover" aria-hidden="true">
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+
+      {{ partial "sidebar" }}
     </div>
 
     <script type="module" src="/js/pageTransitions.js"></script>

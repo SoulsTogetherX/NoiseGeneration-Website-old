@@ -1,15 +1,41 @@
-//#region Constants
+//#region Type Definitions
+type NavKind = "push" | "pop";
+type NavDirection = "forward" | "back";
+
+type NavRequest = {
+  url: URL;
+  kind: NavKind;
+  direction: NavDirection;
+};
+//#endregion
+
+//#region Constants Values
 const NAV_BUTTON_ID = "nav-button";
 const NAV_OPEN_SESSION_KEY = "nav-open";
 
 const TRUE = "1";
 const FALSE = "0";
 
-const MAIN = document.querySelector("main") as HTMLElement | null;
+//#region Transition Cover Classnames
+const ANIMATE_RIGHT_CLASSNAME = "right";
+const ANIMATE_LEFT_CLASSNAME = "left";
+const ANIMATE_IS_ENTERING_CLASSNAME = "is-entering";
+const ANIMATE_IS_EXITING_CLASSNAME = "is-exiting";
+//#endregion
 //#endregion
 
-//#region Public Variable Locks
+//#region Constant Elements
+const MAIN = document.querySelector("main") as HTMLElement | null;
+
+const TRANSITION_COVER = document.getElementById(
+  "transition-cover",
+) as HTMLElement | null;
+//#endregion
+
+//#region Public Variables
 let busy = false;
+let pendingNav: NavRequest | null = null;
+let navSeq = 0;
 //#endregion
 
 //#region Public Methods (Checker Helpers)
@@ -81,26 +107,98 @@ async function activatePageScripts(pathname: string = "/"): Promise<void> {
 }
 //#endregion
 
-//#region Public Methods (Transition)
-async function transitionTo(url: URL): Promise<void> {
-  if (busy) return;
+//#region Public Methods (Transitions)
+async function waitForAllAnimations(container: HTMLElement): Promise<void> {
+  const children = Array.from(container.children) as HTMLElement[];
+
+  await Promise.all(
+    children.map(
+      (child) =>
+        new Promise<void>((resolve) => {
+          child.addEventListener(
+            "animationend",
+            () => {
+              resolve();
+            },
+            {
+              once: true,
+            },
+          );
+        }),
+    ),
+  );
+}
+
+async function transitionCover(
+  slideIn: boolean,
+  forward: boolean,
+): Promise<void> {
+  if (!TRANSITION_COVER) {
+    return;
+  }
+
+  const list = TRANSITION_COVER.classList;
+  list.remove(ANIMATE_RIGHT_CLASSNAME);
+  list.remove(ANIMATE_LEFT_CLASSNAME);
+  list.remove(ANIMATE_IS_ENTERING_CLASSNAME);
+  list.remove(ANIMATE_IS_EXITING_CLASSNAME);
+
+  void TRANSITION_COVER.offsetWidth;
+
+  if (slideIn) {
+    list.add(forward ? ANIMATE_RIGHT_CLASSNAME : ANIMATE_LEFT_CLASSNAME);
+    list.add(ANIMATE_IS_ENTERING_CLASSNAME);
+  } else {
+    list.add(forward ? ANIMATE_LEFT_CLASSNAME : ANIMATE_RIGHT_CLASSNAME);
+    list.add(ANIMATE_IS_EXITING_CLASSNAME);
+  }
+
+  await waitForAllAnimations(TRANSITION_COVER);
+}
+//#endregion
+
+//#region Public Methods (Navigation)
+function requestNavigation(req: NavRequest): void {
+  if (busy) {
+    pendingNav = req;
+    return;
+  }
+  runNavigation(req);
+}
+
+async function runNavigation(req: NavRequest): Promise<void> {
   busy = true;
+  const mySeq = ++navSeq;
 
   try {
-    const nextDoc = await fetchDocument(url.href);
-    nextDoc.documentElement.dataset.pageReady = TRUE;
+    await transitionCover(true, req.direction === "forward");
+    if (mySeq !== navSeq) return;
+
+    const nextDoc = await fetchDocument(req.url.href);
+    if (mySeq !== navSeq) return;
 
     swapMain(nextDoc);
-    updateNav(url.pathname);
-    activatePageScripts(url.pathname);
+    updateNav(req.url.pathname);
+    await activatePageScripts(req.url.pathname);
 
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    window.history.pushState({}, "", url.href);
+    if (req.kind === "push") {
+      history.pushState({}, "", req.url.href);
+    }
+
+    await transitionCover(false, req.direction === "forward");
   } catch (err) {
     console.error(err);
-    window.location.href = url.href;
+    window.location.href = req.url.href;
   } finally {
     busy = false;
+
+    const next = pendingNav;
+    pendingNav = null;
+
+    if (next) {
+      runNavigation(next);
+    }
   }
 }
 //#endregion
@@ -129,23 +227,37 @@ document.addEventListener(
     const target = event.target as Element | null;
     const anchor = target?.closest("a") as HTMLAnchorElement | null;
 
-    if (!anchor) return;
-    if (anchor.hasAttribute("download")) return;
-    if (anchor.target && anchor.target !== "_self") return;
-    if (!isInternalLink(anchor)) return;
+    if (
+      !anchor ||
+      anchor.hasAttribute("download") ||
+      (anchor.target && anchor.target !== "_self") ||
+      !isInternalLink(anchor) ||
+      isModifierClick(event as MouseEvent)
+    ) {
+      return;
+    }
 
-    const href = anchor.href;
-    if (href === location.href) return;
-    if (isModifierClick(event as MouseEvent)) return;
+    const url = new URL(anchor.href);
+    if (url.href === location.href) {
+      return;
+    }
 
     event.preventDefault();
-    transitionTo(new URL(href));
+    requestNavigation({
+      url,
+      kind: "push",
+      direction: "forward",
+    });
   },
   true,
 );
 
-window.addEventListener("popstate", (event: PopStateEvent) => {
-  transitionTo(new URL(location.href));
+window.addEventListener("popstate", () => {
+  requestNavigation({
+    url: new URL(location.href),
+    kind: "pop",
+    direction: "back",
+  });
 });
 //#endregion
 
