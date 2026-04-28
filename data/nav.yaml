@@ -1,0 +1,29 @@
+main:
+  - name: "Home"
+    url: "/"
+    weight: 10
+
+  - name: "Scattered"
+    items:
+      - name: "White"
+        url: "/scattered/white"
+        weight: 10
+      - name: "Gaussian"
+        url: "/scattered/gaussian"
+        weight: 20
+
+  - name: "Ordered"
+    items:
+      - name: "Petter & Salt"
+        url: "/ordered/pepper-and-salt"
+        weight: 10
+
+  - name: "Smooth"
+    items:
+      - name: "Random Walk"
+        url: "/smooth/random-walk"
+        weight: 10
+
+  - name: "Glossary"
+    url: "/glossary"
+    weight: 10

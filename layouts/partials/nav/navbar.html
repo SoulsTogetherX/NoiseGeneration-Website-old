@@ -5,13 +5,9 @@
   <div></div>
 </label>
 <nav id="nav-menu" aria-label="Main">
-  <div aria-hidden="true"></div>
+  <h1 id="nav-title">Noise Textures</h1>
   <ul>
-    {{ range .Site.Menus.main }}
-      <li>
-        <a href="{{ .URL }}">{{ .Name }}</a>
-      </li>
-    {{ end }}
+    {{ partial "nav/navMenuSection.html" hugo.Data.nav.main }}
   </ul>
 </nav>
 <label for="nav-button" id="nav-overlay" aria-hidden="true"></label>

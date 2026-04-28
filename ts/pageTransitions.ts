@@ -81,15 +81,19 @@ function swapMain(nextDoc: Document): void {
 }
 
 function updateNav(pathname: string = "/"): void {
-  document
-    .querySelectorAll('#nav-menu a[aria-current="page"]')
-    .forEach((a) => a.removeAttribute("aria-current"));
+  document.querySelectorAll('#nav-menu a[aria-current="page"]').forEach((a) => {
+    a.removeAttribute("aria-current");
+    a.classList.remove("current-nav-link");
+  });
 
   const match = Array.from(
     document.querySelectorAll<HTMLAnchorElement>("#nav-menu a[href]"),
   ).find((a) => new URL(a.href, location.href).pathname == pathname);
 
-  match?.setAttribute("aria-current", "page");
+  if (match) {
+    match.setAttribute("aria-current", "page");
+    match.classList.add("current-nav-link");
+  }
 }
 //#endregion
 
@@ -237,12 +241,13 @@ document.addEventListener(
       return;
     }
 
+    event.preventDefault();
+
     const url = new URL(anchor.href);
     if (url.href === location.href) {
       return;
     }
 
-    event.preventDefault();
     requestNavigation({
       url,
       kind: "push",
