@@ -1,1 +1,75 @@
-<div class="content-body">White Noise</div>
+<div class="content-body">
+  <header class="page-header">
+    <h1>White Noise</h1>
+    <p>
+      White noise is what most people first think of when they here random
+      noise. By far, white noise is the simplest algorithm used to generate
+      unpredictable sensory feedback. It naturally appears anywhere on surfaces
+      or noises that contains uncontrolled randomness at every
+      <a>sample interval</a>.
+    </p>
+    <p>
+      White noise orginally got it's name as an analogy of 'white light'.
+      Similar to how white light is the mixture of all visible colors, white
+      noise is described as a mixture of all audible frequencies at equal
+      intensity. This is unlike <a>Color Noises</a>, which are a mixture of
+      frequencies at a biased sample of intensities.
+    </p>
+    <p>
+      However, unlike how it may be described, white noise is not created by
+      generating all audible frequencies and piling them ontop of each other.
+      Instead, a shortcut is used: we randomly generate a value for each sample
+      interval of the noise pattern. Every value must be equally possible to
+      randomly select, for each interval, in order it to count as White Noise.
+    </p>
+  </header>
+  <div class="page-section-list">
+    <section class="page-section">
+      <h1>Sounds</h1>
+      <p>
+        White noise sounds, like what you may be familar with in your
+        traditional <a>YouTube Reels</a> or a radio without signal, are an
+        example of a <a>1D noise</a>.
+      </p>
+      <p>
+        In the most basic sense, this type of noise is an ordered list of
+        randomized values, each within the audible spectrum of sound and equally
+        possible to randomly select. Due to this randomness, however, the
+        appearence of white noise is often a collection jagged and unpredictable
+        connected lines, and why you hear "static" when these ordered list of
+        values is played as sound.
+      </p>
+    </section>
+    <section class="page-section">
+      <h1>Textures</h1>
+      <p>
+        White noise textures, meanwhile, are <a>2D noises</a>. These cannot be
+        repsented as sounds or a singled ordered list, like a white noise sounds
+        could. Instead, these are closer to the snow you'd get from a TV screen
+        displaying the surrounding electromagnetic waves without a filter.
+      </p>
+      <p>
+        These are generated essentially the exact same way as sounds were:
+        randomly generating values within a range of vaild numbers, each with an
+        equal random probability of being generated. This time, however, we
+        generate these values as a 2D grid of values, instead of a 1D list.
+      </p>
+      <p>
+        These values are then processed as individual pixels within a 2D texture
+        image. Ignoring color, each number represents the light intensity of the
+        pixel in grayscale. The higher the number, the whiter the pixel. The
+        lower, the darker. As can be seen, there is no smoothness: each pixel's
+        brightness is independent to it's neighbors. This is the expected
+        outcome, as each pixel's value is independently generated from every
+        others.
+      </p>
+    </section>
+  </div>
+  <section class="page-texture-editor">
+    <white-noise resolution="50"></white-noise>
+    <div class="shader-code">
+      <h1>Here is the shader code.</h1>
+      <div></div>
+    </div>
+  </section>
+</div>

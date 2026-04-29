@@ -8,20 +8,29 @@ main:
       - name: "White"
         url: "/scattered/white"
         weight: 10
-      - name: "Gaussian"
-        url: "/scattered/gaussian"
+      - name: "Colored"
+        url: "/scattered/colored"
         weight: 20
+      - name: "Impulse"
+        url: "/scattered/impulse"
+        weight: 30
 
-  - name: "Ordered"
+  - name: "Structured"
     items:
-      - name: "Petter & Salt"
-        url: "/ordered/pepper-and-salt"
+      - name: "Cellular"
+        url: "/"
         weight: 10
+      - name: "Musgrave"
+        url: "/"
+        weight: 20
 
   - name: "Smooth"
     items:
       - name: "Random Walk"
         url: "/smooth/random-walk"
+        weight: 10
+      - name: "Perlin"
+        url: "/"
         weight: 10
 
   - name: "Glossary"

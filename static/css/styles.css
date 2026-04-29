@@ -33,7 +33,7 @@
 
   background: linear-gradient(
     -5deg,
-    rgb(0, 0, 0) 0 2%,
+    rgb(10, 10, 10) 0 2%,
     var(--bg-light) 30% 100%
   );
 
@@ -81,6 +81,8 @@ main {
   inset: 0;
 
   z-index: 9;
+
+  pointer-events: none;
 
   div {
     grid-area: 1 / 1;
@@ -515,7 +517,7 @@ main {
 }
 /*#endregion*/
 
-/*#region sidebar */
+/*#region Sidebar */
 #sidebar {
   display: flex;
   flex-direction: column;
@@ -587,5 +589,35 @@ main {
   #content-wrapper {
     margin-left: 0;
   }
+}
+/*#endregion*/
+
+/*#region Glossary Page */
+#glossary-header {
+  h1 {
+  }
+  h2 {
+  }
+}
+#glossary-term-list {
+  h1 {
+  }
+  p {
+  }
+}
+
+.glossary-section {
+}
+/*#endregion*/
+
+/*#region Default Pages */
+.page-header {
+}
+.page-section-list {
+}
+.page-section {
+}
+
+.page-texture-editor {
 }
 /*#endregion*/
