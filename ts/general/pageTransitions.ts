@@ -104,9 +104,20 @@ async function activatePageScripts(pathname: string = "/"): Promise<void> {
   currentPageCleanup?.();
   currentPageCleanup = null;
 
-  if (pathname === "/") {
-    const mod = await import("./homeBG.js");
-    currentPageCleanup = mod.startHomeBG();
+  console.log(pathname);
+  switch (pathname) {
+    case "/":
+      {
+        const mod = await import("../pageFunctionality/homeBG.js");
+        currentPageCleanup = mod.start();
+      }
+      break;
+    case "/scattered/white/":
+      {
+        const mod = await import("../pageFunctionality/expandSections.js");
+        currentPageCleanup = mod.start();
+      }
+      break;
   }
 }
 //#endregion
@@ -209,8 +220,8 @@ async function runNavigation(req: NavRequest): Promise<void> {
 
 //#region Public Methods (Initiation)
 function initiatePage(): void {
-  updateNav();
-  activatePageScripts();
+  updateNav(window.location.pathname);
+  activatePageScripts(window.location.pathname);
 
   const open = sessionStorage.getItem("nav-open") === TRUE;
   const root = document.documentElement;

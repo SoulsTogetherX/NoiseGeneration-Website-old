@@ -1,4 +1,4 @@
-import { HTMLNoiseCanvasElement } from "./noiseCanvasComponenets.js";
+import { HTMLNoiseCanvasElement } from "../general/noiseCanvasComponenets.js";
 
 //#region Constants
 const HOME_BG_ID = "home-bg";
@@ -8,7 +8,7 @@ const DEFAULT_OPACITY = 0.2;
 //#endregion
 
 //#region BG Animations
-export function startHomeBG(): () => void {
+export function start(): () => void {
   //#region Document Query
   const HOME_BG_CONTAINER = document.getElementById(HOME_BG_ID);
   if (!HOME_BG_CONTAINER) {

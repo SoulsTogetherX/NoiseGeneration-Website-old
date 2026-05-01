@@ -15,7 +15,7 @@
   <title>{{ .Site.Title }}</title>
 
   <!-- CSS -->
-  <link rel="stylesheet" href="../css/styles.css" />
+  <link rel="stylesheet" href="{{ relURL "/css/styles.css" }}" />
 
   <!-- FONT -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -26,11 +26,24 @@
   />
 
   <!-- ICON -->
-  <link rel="icon" type="image/x-icon" href="myfavicon.ico" />
+  <link rel="icon" type="image/x-icon" href="{{ relURL "myfavicon.ico" }}" />
 
   <!-- Scripts -->
-  <script type="module" src="../js/helperMethods.js"></script>
-  <script type="module" src="../js/noiseCanvasComponenets.js"></script>
-  <script type="module" src="../js/generalFunctionality.js"></script>
-  <script type="module" src="../js/homeBG.js"></script>
+  <script
+    type="module"
+    src="{{ relURL "js/general/helperMethods.js" }}"
+  ></script>
+  <script
+    type="module"
+    src="{{ relURL "js/general/noiseCanvasComponenets.js" }}"
+  ></script>
+  <script
+    type="module"
+    src="{{ relURL "js/general/generalFunctionality.js" }}"
+  ></script>
+
+  <script
+    type="module"
+    src="{{ relURL "js/pageFunctionality/expandSections.js" }}"
+  ></script>
 </head>

@@ -6,7 +6,9 @@
   <body class="flex-row">
     {{ partial "nav/navbar" }}
     <div id="content-wrapper">
-      <main>{{ block "main" . }}{{ end }}</main>
+      <main>
+        {{ block "main" . }}{{ end }}
+      </main>
 
       <div id="transition-cover" aria-hidden="true">
         <div></div>
