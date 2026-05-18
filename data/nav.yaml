@@ -9,10 +9,10 @@ main:
         url: "/scattered/white/"
         weight: 10
       - name: "Colored"
-        url: "/scattered/colored/"
+        url: "/"
         weight: 20
       - name: "Impulse"
-        url: "/scattered/impulse/"
+        url: "/"
         weight: 30
 
   - name: "Structured"
@@ -27,12 +27,12 @@ main:
   - name: "Smooth"
     items:
       - name: "Random Walk"
-        url: "/smooth/random-walk/"
+        url: "/"
         weight: 10
       - name: "Perlin"
         url: "/"
         weight: 10
 
   - name: "Glossary"
-    url: "/glossary/"
+    url: "/"
     weight: 10

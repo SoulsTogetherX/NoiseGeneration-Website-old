@@ -13,9 +13,6 @@ menus:
     - name: "Home"
       url: "/"
       weight: 10
-    - name: "About"
-      url: "/about"
-      weight: 20
     - name: "Glossary"
-      url: "/glossary"
+      url: "/"
       weight: 90

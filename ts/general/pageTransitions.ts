@@ -104,17 +104,10 @@ async function activatePageScripts(pathname: string = "/"): Promise<void> {
   currentPageCleanup?.();
   currentPageCleanup = null;
 
-  console.log(pathname);
   switch (pathname) {
     case "/":
       {
         const mod = await import("../pageFunctionality/homeBG.js");
-        currentPageCleanup = mod.start();
-      }
-      break;
-    case "/scattered/white/":
-      {
-        const mod = await import("../pageFunctionality/expandSections.js");
         currentPageCleanup = mod.start();
       }
       break;

@@ -7,7 +7,7 @@ const HOME_BG_CHILD_CLASS = "home-noise-bg";
 const DEFAULT_OPACITY = 0.2;
 //#endregion
 
-//#region BG Animations
+//#region Main Code
 export function start(): () => void {
   //#region Document Query
   const HOME_BG_CONTAINER = document.getElementById(HOME_BG_ID);
