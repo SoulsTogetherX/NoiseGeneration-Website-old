@@ -2,8 +2,10 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     "target": "ES6",
-    "lib": ["es2015", "dom"],
-    "rootDir": "./src",
-    "outDir": "./dist"
+    "jsx": "preserve",
+    "lib": ["es2017", "DOM.Iterable", "dom"],
+    "module": "es2020",
+    "rootDir": "ts",
+    "outDir": "static/js"
   }
 }

@@ -1,0 +1,25 @@
+### .vscode ###
+*/.vscode
+
+# prettify
+.prettierrc.json
+
+# npm
+/node_modules/
+/package-lock.json
+/package.json
+
+### Typescript ###
+/static/js/
+
+### Hugo ###
+# Generated files by hugo
+/public/
+/resources/_gen/
+hugo_stats.json
+.hugo_build.lock
+
+# Executable may be added to repository
+hugo.exe
+hugo.linux
+hugo.darwin

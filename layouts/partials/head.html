@@ -1,0 +1,48 @@
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+
+  <meta property="og:image" content="" />
+  <meta property="og:type" content="website" />
+
+  <meta name="keywords" content="{{ .Site.Params.keywords }}" />
+  <meta name="author" content="{{ .Site.Params.author }}" />
+  <meta property="og:description" content="{{ .Site.Params.description }}" />
+
+  <meta property="og:url" content="{{ .Permalink }}" />
+  <meta property="og:title" content="{{ .Site.Title }}" />
+  <title>{{ .Site.Title }}</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="{{ relURL "/css/styles.css" }}" />
+
+  <!-- FONT -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- ICON -->
+  <link rel="icon" type="image/x-icon" href="{{ relURL "myfavicon.ico" }}" />
+
+  <!-- Scripts -->
+  <script
+    type="module"
+    src="{{ relURL "js/general/helperMethods.js" }}"
+  ></script>
+  <script
+    type="module"
+    src="{{ relURL "js/general/noiseCanvasComponenets.js" }}"
+  ></script>
+  <script
+    type="module"
+    src="{{ relURL "js/general/generalFunctionality.js" }}"
+  ></script>
+  <script
+    type="module"
+    src="{{ relURL "js/general/pageTransitions.js" }}"
+  ></script>
+</head>

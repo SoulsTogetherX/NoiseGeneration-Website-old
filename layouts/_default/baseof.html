@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" charset="utf-8">
+  {{ partial "head" }}
+
+
+  <body class="flex-row">
+    {{ partial "nav/navbar" }}
+    <div id="content-wrapper">
+      <main>
+        {{ block "main" . }}{{ end }}
+      </main>
+
+      <div id="transition-cover" aria-hidden="true">
+        <div></div>
+        <div></div>
+        <div></div>
+      </div>
+
+      {{ partial "sidebar" }}
+    </div>
+  </body>
+</html>

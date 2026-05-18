@@ -1,0 +1,28 @@
+{{ range . }}
+  {{ if .items }}
+    <li class="nav-group-title">
+      {{ .name }}
+    </li>
+    {{ partial "nav/navMenuSection.html" .items }}
+  {{ else }}
+    {{ $isGlossary := eq .name "Glossary" }}
+
+    {{ if $isGlossary }}
+      <div class="nav-glossary-padding"></div>
+    {{ end }}
+
+
+    <li
+      class="nav-group-item {{ if $isGlossary }}
+        nav-glossary-link-wrapper
+      {{ end }}"
+    >
+      <a href="{{ .url }}" aria-label="{{ .name }}">
+        <div class="nav-link-wrapper ">
+          <div class="nav-link-text">{{ .name }}</div>
+        </div>
+        <div class="nav-underline"></div>
+      </a>
+    </li>
+  {{ end }}
+{{ end }}

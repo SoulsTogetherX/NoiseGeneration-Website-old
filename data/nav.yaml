@@ -1,0 +1,38 @@
+main:
+  - name: "Home"
+    url: "/"
+    weight: 10
+
+  - name: "Scattered"
+    items:
+      - name: "White"
+        url: "/scattered/white/"
+        weight: 10
+      - name: "Colored"
+        url: "/"
+        weight: 20
+      - name: "Impulse"
+        url: "/"
+        weight: 30
+
+  - name: "Structured"
+    items:
+      - name: "Cellular"
+        url: "/"
+        weight: 10
+      - name: "Musgrave"
+        url: "/"
+        weight: 20
+
+  - name: "Smooth"
+    items:
+      - name: "Random Walk"
+        url: "/"
+        weight: 10
+      - name: "Perlin"
+        url: "/"
+        weight: 10
+
+  - name: "Glossary"
+    url: "/"
+    weight: 10
